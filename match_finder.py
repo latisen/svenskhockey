@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 import logging
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,52 @@ CACHE_TTL_SECONDS = 3600
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
+
+
+def _clean_text(value: str | None) -> str:
+    """Normaliserar text från swehockey-sidorna."""
+    if value is None:
+        return ""
+    return (
+        str(value)
+        .replace("Â", "")
+        .replace("\xa0", " ")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .replace("\t", " ")
+        .strip()
+    )
+
+
+def _extract_player_tokens(text: str) -> list[str]:
+    """Splittar celltext till en eller flera spelare i formatet 'nr. namn'."""
+    cleaned = _clean_text(text)
+    if not cleaned:
+        return []
+
+    parts = re.split(r'(?=\d+\.\s*)', cleaned)
+    tokens = []
+    for part in parts:
+        part = _clean_text(part)
+        if re.match(r'^\d+\.\s*', part):
+            tokens.append(re.sub(r'\s+', ' ', part))
+    return tokens
+
+
+def _categorize_event(event_type: str) -> str:
+    """Klassificerar en matchhändelse för enklare rendering i frontend."""
+    t = _clean_text(event_type).lower()
+    if not t:
+        return "other"
+    if "powerbreak" in t:
+        return "powerbreak"
+    if "gk in" in t or "gk out" in t:
+        return "goalkeeper_change"
+    if " min" in t:
+        return "penalty"
+    if re.search(r'\d+\s*-\s*\d+', t):
+        return "goal"
+    return "other"
 
 
 def _get_cached_id(home_team: str, away_team: str, date: str, time_str: str) -> str | None:
@@ -138,7 +185,7 @@ def _extract_events_by_period(soup) -> dict:
         if not cells:
             continue
         
-        first_cell_text = cells[0].get_text(strip=True).replace("Â", "").strip()
+        first_cell_text = _clean_text(cells[0].get_text(" ", strip=True))
         
         period_match = re.search(r'(\d+)\s*(?:st|nd|rd|th)?\s+period', first_cell_text, re.I)
         if period_match:
@@ -149,20 +196,18 @@ def _extract_events_by_period(soup) -> dict:
         if current_period and len(cells) >= 2:
             time_val = first_cell_text
             if re.match(r'\d{1,2}:\d{2}', time_val) or time_val in ['00:00', '60:00']:
-                event_type = cells[1].get_text(strip=True).replace("Â", "").strip() if len(cells) > 1 else ""
-                team = cells[2].get_text(strip=True).replace("Â", "").strip() if len(cells) > 2 else ""
-                
-                player_cell = cells[3].get_text(strip=True).replace("Â", "").replace("\n", " ") if len(cells) > 3 else ""
-                player_cell = re.sub(r'\s+', ' ', player_cell)
-                
-                details = cells[4].get_text(strip=True).replace("Â", "").strip() if len(cells) > 4 else ""
+                event_type = _clean_text(cells[1].get_text(" ", strip=True)) if len(cells) > 1 else ""
+                team = _clean_text(cells[2].get_text(" ", strip=True)) if len(cells) > 2 else ""
+                player_cell = _clean_text(cells[3].get_text(" ", strip=True)) if len(cells) > 3 else ""
+                details = _clean_text(cells[4].get_text(" ", strip=True)) if len(cells) > 4 else ""
                 
                 event = {
                     "time": time_val,
                     "type": event_type,
                     "team": team,
                     "player": player_cell,
-                    "details": details
+                    "details": details,
+                    "category": _categorize_event(event_type),
                 }
                 
                 events_by_period[current_period].append(event)
@@ -194,22 +239,21 @@ def _extract_goalkeeper_info(soup) -> dict:
         if not cells:
             continue
         
-        row_text = " ".join([c.get_text(strip=True) for c in cells])
+        row_text = " ".join([_clean_text(c.get_text(" ", strip=True)) for c in cells])
         if "Goalkeeper Summary" in row_text:
             gk_section_found = True
             continue
         
         if gk_section_found and len(cells) >= 5:
-            team = cells[2].get_text(strip=True).replace("Â", "").strip() if len(cells) > 2 else ""
-            player_info = cells[3].get_text(strip=True).replace("Â", "").strip() if len(cells) > 3 else ""
-            stats = cells[4].get_text(strip=True).replace("Â", "").strip() if len(cells) > 4 else ""
+            team = _clean_text(cells[2].get_text(" ", strip=True)) if len(cells) > 2 else ""
+            player_info = _clean_text(cells[3].get_text(" ", strip=True)) if len(cells) > 3 else ""
+            stats = _clean_text(cells[4].get_text(" ", strip=True)) if len(cells) > 4 else ""
             
             if team and player_info and "%" in stats:
                 num_match = re.match(r'(\d+)\.\s*(.+)', player_info)
                 if num_match:
                     gk_num = num_match.group(1)
-                    gk_name = num_match.group(2).replace("\n", " ").replace("\r", "")
-                    gk_name = re.sub(r'\s+', ' ', gk_name).strip()
+                    gk_name = _clean_text(num_match.group(2))
                     
                     gk_info[gk_num] = {
                         "name": gk_name,
@@ -223,12 +267,240 @@ def _extract_goalkeeper_info(soup) -> dict:
     return gk_info
 
 
+def _extract_summary_stats(soup) -> dict:
+    """Extraherar sammanfattande statistik från resultattabellen."""
+    summary = {}
+    summary_table = None
+    for table in soup.find_all("table", class_="tblContent"):
+        rows = table.find_all("tr")
+        if len(rows) == 9:
+            summary_table = table
+            break
+
+    if not summary_table:
+        return summary
+
+    rows = summary_table.find_all("tr")
+    parsed_rows = []
+    for row in rows:
+        parsed_rows.append([_clean_text(c.get_text(" ", strip=True)) for c in row.find_all(["th", "td"])])
+
+    # Saves (antal) och save percentage
+    if len(parsed_rows) > 5 and len(parsed_rows[4]) >= 6:
+        summary["saves"] = {
+            "label": "Saves",
+            "home": parsed_rows[4][1],
+            "away": parsed_rows[4][4],
+            "home_periods": parsed_rows[4][2],
+            "away_periods": parsed_rows[4][5],
+        }
+
+    if len(parsed_rows) > 6 and len(parsed_rows[5]) >= 4:
+        summary["save_percentage"] = {
+            "label": "Save %",
+            "home": parsed_rows[5][1],
+            "away": parsed_rows[5][3],
+        }
+
+    if len(parsed_rows) > 7 and len(parsed_rows[6]) >= 10:
+        summary["pim"] = {
+            "label": "PIM",
+            "home": parsed_rows[6][1],
+            "away": parsed_rows[6][8],
+            "home_periods": parsed_rows[6][2],
+            "away_periods": parsed_rows[6][9],
+        }
+
+    if len(parsed_rows) > 8 and len(parsed_rows[8]) >= 6:
+        summary["powerplay"] = {
+            "label": "Powerplay",
+            "home": parsed_rows[8][1],
+            "away": parsed_rows[8][4],
+            "home_time": parsed_rows[8][2],
+            "away_time": parsed_rows[8][5],
+        }
+
+    return summary
+
+
+def _extract_reports(match_id: str) -> list[dict]:
+    """Hämtar rapportlänkar från Reports-sidan."""
+    report_url = f"https://stats.swehockey.se/Game/Reports/{match_id}"
+    reports = []
+
+    try:
+        response = requests.get(report_url, headers=headers, timeout=10)
+        response.encoding = "utf-8"
+        if response.status_code != 200:
+            return reports
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for row in soup.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 2:
+                continue
+
+            link = cells[0].find("a", href=True)
+            if not link:
+                continue
+
+            name = _clean_text(link.get_text(" ", strip=True))
+            if not name or name in {"Line Up", "Actions", "Reports"}:
+                continue
+
+            reports.append(
+                {
+                    "name": name,
+                    "created_at": _clean_text(cells[1].get_text(" ", strip=True)),
+                    "url": urljoin("https://stats.swehockey.se", link["href"]),
+                }
+            )
+    except Exception as e:
+        logger.warning(f"Could not extract reports for {match_id}: {e}")
+
+    return reports
+
+
+def _extract_lineups(match_id: str) -> dict:
+    """Hämtar laguppställningar och domare från LineUps-sidan."""
+    lineup_url = f"https://stats.swehockey.se/Game/LineUps/{match_id}"
+    data = {
+        "officials": {"referees": [], "linesmen": []},
+        "teams": [],
+    }
+
+    try:
+        response = requests.get(lineup_url, headers=headers, timeout=10)
+        response.encoding = "utf-8"
+        if response.status_code != 200:
+            return data
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Domare/linjedomare
+        for row in soup.find_all("tr"):
+            cells = [_clean_text(c.get_text(" ", strip=True)) for c in row.find_all(["td", "th"])]
+            if not cells:
+                continue
+
+            row_text = " | ".join(cells)
+            if "Referee(s)" in row_text and "Linesmen" in row_text:
+                refs = ""
+                lines = ""
+                ref_match = re.search(r'Referee\(s\)\s*:?\s*(.*?)\s*Linesmen', row_text)
+                line_match = re.search(r'Linesmen\s*:?\s*(.*)$', row_text)
+                if ref_match:
+                    refs = _clean_text(ref_match.group(1))
+                if line_match:
+                    lines = _clean_text(line_match.group(1))
+
+                if refs:
+                    data["officials"]["referees"] = [n.strip() for n in refs.split(",") if n.strip()]
+                if lines:
+                    data["officials"]["linesmen"] = [n.strip() for n in lines.split(",") if n.strip()]
+                break
+
+        # Välj tabellen som innehåller själva line up-strukturen
+        lineup_table = None
+        for table in soup.find_all("table", class_="tblContent"):
+            rows = table.find_all("tr")
+            if len(rows) >= 30:
+                lineup_table = table
+                break
+
+        if not lineup_table:
+            return data
+
+        team_blocks: dict[str, dict] = {}
+        current_team = None
+        current_group = None
+
+        def ensure_team(team_name: str):
+            if team_name not in team_blocks:
+                team_blocks[team_name] = {
+                    "team_name": team_name,
+                    "coaches": {"head": "", "assistant": ""},
+                    "goalies": [],
+                    "extra_players": [],
+                    "lines": {
+                        "1st Line": [],
+                        "2nd Line": [],
+                        "3rd Line": [],
+                        "4th Line": [],
+                    },
+                }
+
+        for row in lineup_table.find_all("tr"):
+            cells = [_clean_text(c.get_text(" ", strip=True)) for c in row.find_all(["td", "th"])]
+            if not cells:
+                continue
+
+            row_text = " | ".join(cells)
+            first = cells[0] if cells else ""
+
+            # Teamheader, t.ex. "Halmstad Hammers HC (Blue)"
+            if first and "(" in first and ")" in first and "Line" not in first and "Coach" not in first and "Referee" not in first:
+                current_team = first
+                ensure_team(current_team)
+                current_group = None
+                continue
+
+            if not current_team:
+                continue
+
+            # Coaches
+            if "Head Coach" in row_text:
+                head_match = re.search(r'Head Coach:\s*([^|]+)', row_text)
+                asst_match = re.search(r'Assistant Coach:\s*([^|]+)', row_text)
+                if head_match:
+                    team_blocks[current_team]["coaches"]["head"] = _clean_text(head_match.group(1))
+                if asst_match:
+                    team_blocks[current_team]["coaches"]["assistant"] = _clean_text(asst_match.group(1))
+                continue
+
+            # Radstart med gruppetikett
+            if first in {"Goalies", "Extra Players", "1st Line", "2nd Line", "3rd Line", "4th Line"}:
+                current_group = first
+                player_candidates = cells[1:]
+            else:
+                player_candidates = cells
+
+            players = []
+            for candidate in player_candidates:
+                players.extend(_extract_player_tokens(candidate))
+
+            if not players or not current_group:
+                continue
+
+            if current_group == "Goalies":
+                team_blocks[current_team]["goalies"].extend(players)
+            elif current_group == "Extra Players":
+                team_blocks[current_team]["extra_players"].extend(players)
+            elif current_group in team_blocks[current_team]["lines"]:
+                team_blocks[current_team]["lines"][current_group].extend(players)
+
+        # Deduplicera spelare per lista
+        for team_name, block in team_blocks.items():
+            block["goalies"] = list(dict.fromkeys(block["goalies"]))
+            block["extra_players"] = list(dict.fromkeys(block["extra_players"]))
+            for line_name, line_players in block["lines"].items():
+                block["lines"][line_name] = list(dict.fromkeys(line_players))
+
+            data["teams"].append(block)
+
+        return data
+    except Exception as e:
+        logger.warning(f"Could not extract lineups for {match_id}: {e}")
+        return data
+
+
 def get_match_details(match_id: str) -> dict | None:
     """Hämtar detaljerad matchinformation från Events-sidan."""
     url = f"https://stats.swehockey.se/Game/Events/{match_id}"
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
+        response.encoding = "utf-8"
         if response.status_code != 200:
             return None
         
@@ -238,7 +510,7 @@ def get_match_details(match_id: str) -> dict | None:
         if not h2:
             return None
         
-        teams_text = h2.get_text(strip=True)
+        teams_text = _clean_text(h2.get_text(" ", strip=True))
         teams = re.split(r'[Â\s\xa0]*-[Â\s\xa0]*', teams_text)
         if len(teams) != 2:
             logger.error(f"Failed to split teams from: {repr(teams_text)}")
@@ -247,7 +519,7 @@ def get_match_details(match_id: str) -> dict | None:
         result_divs = soup.find_all("div", string=re.compile(r'^\d+[Â\s\xa0]*-[Â\s\xa0]*\d+$'))
         score = None
         for div in result_divs:
-            score_text = div.get_text(strip=True)
+            score_text = _clean_text(div.get_text(" ", strip=True))
             if '-' in score_text:
                 score = score_text
                 break
@@ -256,7 +528,7 @@ def get_match_details(match_id: str) -> dict | None:
         datetime_str = None
         venue = None
         for h3 in h3s:
-            text = h3.get_text(strip=True)
+            text = _clean_text(h3.get_text(" ", strip=True))
             if re.search(r'\d{4}-\d{2}-\d{2}', text):
                 datetime_str = text
             elif len(text) > 5 and ("Arena" in text or "Hall" in text or "Ishall" in text):
@@ -286,18 +558,25 @@ def get_match_details(match_id: str) -> dict | None:
         
         events_by_period = _extract_events_by_period(soup)
         goalkeepers = _extract_goalkeeper_info(soup)
+        summary_stats = _extract_summary_stats(soup)
+        lineup_data = _extract_lineups(match_id)
+        reports = _extract_reports(match_id)
         
         return {
             "home_team": teams[0].strip(),
             "away_team": teams[1].strip(),
-            "score": score.replace("Â", "").strip() if score else None,
-            "datetime": datetime_str.replace("Â", "").strip() if datetime_str else None,
+            "score": _clean_text(score) if score else None,
+            "datetime": _clean_text(datetime_str) if datetime_str else None,
             "venue": venue,
             "spectators": spectators,
             "home_shots": home_shots,
             "away_shots": away_shots,
+            "summary_stats": summary_stats,
+            "officials": lineup_data.get("officials", {"referees": [], "linesmen": []}),
+            "lineups": lineup_data,
             "events_by_period": events_by_period,
             "goalkeepers": goalkeepers,
+            "reports": reports,
             "id": match_id,
         }
     

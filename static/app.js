@@ -471,15 +471,41 @@
   function displayMatchDetails(details) {
     if (!modalDetails) return;
 
+    function cleanText(value) {
+      return String(value || "")
+        .replace(/Â/g, "")
+        .replace(/\u00a0/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function sectionToggle(sectionElem, visible) {
+      if (!sectionElem) return;
+      if (visible) {
+        sectionElem.removeAttribute("hidden");
+      } else {
+        sectionElem.setAttribute("hidden", "");
+      }
+    }
+
     // Uppdatera titel
     var title = document.getElementById("modalTitle");
     if (title) {
-      title.textContent = (details.home_team || "?") + " – " + (details.away_team || "?");
+      title.textContent = cleanText(details.home_team || "?") + " – " + cleanText(details.away_team || "?");
     }
 
     // Hemmalag
     var homeTeamElem = document.getElementById("modalHomeTeam");
-    if (homeTeamElem) homeTeamElem.textContent = details.home_team || "–";
+    if (homeTeamElem) homeTeamElem.textContent = cleanText(details.home_team || "–");
 
     var homeScoreElem = document.getElementById("modalHomeScore");
     if (homeScoreElem) {
@@ -493,7 +519,7 @@
 
     // Bortalag
     var awayTeamElem = document.getElementById("modalAwayTeam");
-    if (awayTeamElem) awayTeamElem.textContent = details.away_team || "–";
+    if (awayTeamElem) awayTeamElem.textContent = cleanText(details.away_team || "–");
 
     var awayScoreElem = document.getElementById("modalAwayScore");
     if (awayScoreElem) {
@@ -508,145 +534,236 @@
     // Datum & Tid
     var dateTimeElem = document.getElementById("modalDateTime");
     if (dateTimeElem) {
-      dateTimeElem.textContent = (details.datetime || "–")
-        .replace(/Â/g, "")
-        .trim();
+      dateTimeElem.textContent = cleanText(details.datetime || "–");
     }
 
     // Arena
     var venueElem = document.getElementById("modalVenue");
     if (venueElem) {
-      venueElem.textContent = (details.venue || "–")
-        .replace(/Â/g, "")
-        .replace(/<b>|<\/b>/g, "")
-        .trim();
+      venueElem.textContent = cleanText(details.venue || "–").replace(/<b>|<\/b>/g, "");
     }
 
     // Publik
     var specElem = document.getElementById("modalSpectators");
     if (specElem) {
-      specElem.textContent = details.spectators ? details.spectators + " personer" : "–";
+      specElem.textContent = details.spectators ? cleanText(details.spectators) + " personer" : "–";
     }
 
     // Skott på mål
     var homeShotsElem = document.getElementById("modalHomeShots");
     if (homeShotsElem) {
-      homeShotsElem.textContent = details.home_shots ? details.home_shots.replace(/<strong>|<\/strong>/g, "") : "–";
+      homeShotsElem.textContent = details.home_shots ? cleanText(details.home_shots).replace(/<strong>|<\/strong>/g, "") : "–";
     }
 
     var awayShotsElem = document.getElementById("modalAwayShots");
     if (awayShotsElem) {
-      awayShotsElem.textContent = details.away_shots ? details.away_shots.replace(/<strong>|<\/strong>/g, "") : "–";
+      awayShotsElem.textContent = details.away_shots ? cleanText(details.away_shots).replace(/<strong>|<\/strong>/g, "") : "–";
     }
 
     // Link to full details
     var detailsLink = document.getElementById("modalDetailsLink");
     if (detailsLink && details.id) {
       detailsLink.href = "https://stats.swehockey.se/Game/Events/" + details.id;
+    }
 
-        // Display Goalkeepers
-        var gkSection = document.getElementById("modalGoalkeepersSection");
-        var gkContainer = document.getElementById("modalGoalkeepers");
-        if (gkContainer && details.goalkeepers) {
-          var gkCount = Object.keys(details.goalkeepers).length;
-          if (gkCount > 0) {
-            gkSection.removeAttribute("hidden");
-            gkContainer.innerHTML = "";
-        
-            for (var gkNum in details.goalkeepers) {
-              if (details.goalkeepers.hasOwnProperty(gkNum)) {
-                var gk = details.goalkeepers[gkNum];
-                var gkDiv = document.createElement("div");
-                gkDiv.className = "modal-gk-row";
-                gkDiv.innerHTML = 
-                  "<div class='gk-name'>#" + gkNum + " " + (gk.name || "?") + " (" + (gk.team || "?") + ")</div>" +
-                  "<div class='gk-stats'>" + (gk.stats || "–") + "</div>";
-                gkContainer.appendChild(gkDiv);
-              }
-            }
-          } else {
-            gkSection.setAttribute("hidden", "");
-          }
+    // Key stats (PP, PIM, saves)
+    var keyStatsSection = document.getElementById("modalKeyStatsSection");
+    var keyStatsGrid = document.getElementById("modalKeyStatsGrid");
+    if (keyStatsGrid && details.summary_stats) {
+      var statRows = [];
+      var keys = ["save_percentage", "pim", "powerplay"];
+      for (var s = 0; s < keys.length; s++) {
+        var key = keys[s];
+        var stat = details.summary_stats[key];
+        if (!stat) continue;
+        statRows.push(
+          "<div class='modal-key-stat-card'>" +
+            "<div class='modal-key-stat-label'>" + escapeHtml(cleanText(stat.label || key)) + "</div>" +
+            "<div class='modal-key-stat-values'>" +
+              "<span>Hemma: <strong>" + escapeHtml(cleanText(stat.home || "-")) + "</strong></span>" +
+              "<span>Borta: <strong>" + escapeHtml(cleanText(stat.away || "-")) + "</strong></span>" +
+            "</div>" +
+          "</div>"
+        );
+      }
+      keyStatsGrid.innerHTML = statRows.join("");
+      sectionToggle(keyStatsSection, statRows.length > 0);
+    } else {
+      sectionToggle(keyStatsSection, false);
+    }
+
+    // Officials
+    var officialsSection = document.getElementById("modalOfficialsSection");
+    var officialsElem = document.getElementById("modalOfficials");
+    if (officialsElem && details.officials) {
+      var refereeList = (details.officials.referees || []).map(cleanText).filter(Boolean);
+      var linesmenList = (details.officials.linesmen || []).map(cleanText).filter(Boolean);
+      var officialsHtml = [];
+      if (refereeList.length > 0) {
+        officialsHtml.push("<div><strong>Domare:</strong> " + escapeHtml(refereeList.join(", ")) + "</div>");
+      }
+      if (linesmenList.length > 0) {
+        officialsHtml.push("<div><strong>Linjedomare:</strong> " + escapeHtml(linesmenList.join(", ")) + "</div>");
+      }
+      officialsElem.innerHTML = officialsHtml.join("");
+      sectionToggle(officialsSection, officialsHtml.length > 0);
+    } else {
+      sectionToggle(officialsSection, false);
+    }
+
+    // Lineups
+    var lineupsSection = document.getElementById("modalLineupsSection");
+    var lineupsContainer = document.getElementById("modalLineups");
+    if (lineupsContainer && details.lineups && details.lineups.teams) {
+      var lineupHtml = [];
+      for (var t = 0; t < details.lineups.teams.length; t++) {
+        var team = details.lineups.teams[t];
+        var lines = team.lines || {};
+        var lineKeys = ["1st Line", "2nd Line", "3rd Line", "4th Line"];
+        var parts = [];
+
+        for (var li = 0; li < lineKeys.length; li++) {
+          var lk = lineKeys[li];
+          var players = (lines[lk] || []).map(cleanText).filter(Boolean);
+          if (players.length === 0) continue;
+          parts.push(
+            "<div class='modal-line-group'>" +
+              "<h5>" + escapeHtml(lk) + "</h5>" +
+              "<p>" + escapeHtml(players.join(" | ")) + "</p>" +
+            "</div>"
+          );
         }
 
-        // Display Events by Period
-        var eventsSection = document.getElementById("modalEventsSection");
-        var periodsContainer = document.getElementById("modalPeriods");
-        if (periodsContainer && details.events_by_period) {
-          var eventCount = 0;
-          for (var period in details.events_by_period) {
-            if (details.events_by_period.hasOwnProperty(period)) {
-              eventCount += details.events_by_period[period].length;
-            }
-          }
-      
-          if (eventCount > 0) {
-            eventsSection.removeAttribute("hidden");
-            periodsContainer.innerHTML = "";
-        
-            // Display each period
-            for (var p = 1; p <= 3; p++) {
-              var periodKey = "period_" + p;
-              var periodEvents = details.events_by_period[periodKey];
-          
-              if (periodEvents && periodEvents.length > 0) {
-                var periodDiv = document.createElement("div");
-                periodDiv.className = "modal-period";
-            
-                var periodTitle = document.createElement("h4");
-                periodTitle.className = "modal-period-title";
-                periodTitle.textContent = "Period " + p;
-                periodDiv.appendChild(periodTitle);
-            
-                var eventsList = document.createElement("div");
-                eventsList.className = "modal-events-list";
-            
-                // Show only goals and important events
-                var goals = [];
-                var penalties = [];
-            
-                for (var i = 0; i < periodEvents.length; i++) {
-                  var evt = periodEvents[i];
-                  if (evt.type && evt.type.indexOf("(") > -1) {
-                    goals.push(evt);
-                  } else if (evt.type && evt.type.indexOf("min") > -1) {
-                    penalties.push(evt);
-                  }
-                }
-            
-                // Display goals
-                for (var j = 0; j < goals.length; j++) {
-                  var goal = goals[j];
-                  var goalDiv = document.createElement("div");
-                  goalDiv.className = "modal-event modal-event-goal";
-                  goalDiv.innerHTML = 
-                    "<span class='event-time'>" + (goal.time || "–") + "</span> " +
-                    "<span class='event-type'>" + (goal.type || "–") + "</span> " +
-                    "<span class='event-team'>" + (goal.team || "–") + "</span> " +
-                    "<span class='event-player'>" + (goal.player ? goal.player.substring(0, 50) : "–") + "</span>";
-                  eventsList.appendChild(goalDiv);
-                }
-            
-                // Display first 3 penalties
-                for (var k = 0; k < Math.min(penalties.length, 3); k++) {
-                  var penalty = penalties[k];
-                  var penDiv = document.createElement("div");
-                  penDiv.className = "modal-event modal-event-penalty";
-                  penDiv.innerHTML = 
-                    "<span class='event-time'>" + (penalty.time || "–") + "</span> " +
-                    "<span class='event-type'>" + (penalty.type || "–") + "</span> " +
-                    "<span class='event-team'>" + (penalty.team || "–") + "</span>";
-                  eventsList.appendChild(penDiv);
-                }
-            
-                periodDiv.appendChild(eventsList);
-                periodsContainer.appendChild(periodDiv);
-              }
-            }
-          } else {
-            eventsSection.setAttribute("hidden", "");
-          }
+        var gks = (team.goalies || []).map(cleanText).filter(Boolean);
+        var extras = (team.extra_players || []).map(cleanText).filter(Boolean);
+        var headCoach = cleanText(team.coaches && team.coaches.head ? team.coaches.head : "");
+        var assistantCoach = cleanText(team.coaches && team.coaches.assistant ? team.coaches.assistant : "");
+
+        if (gks.length > 0) {
+          parts.push(
+            "<div class='modal-line-group'>" +
+              "<h5>Maalvakter</h5>" +
+              "<p>" + escapeHtml(gks.join(" | ")) + "</p>" +
+            "</div>"
+          );
         }
+
+        if (extras.length > 0) {
+          parts.push(
+            "<div class='modal-line-group'>" +
+              "<h5>Extra players</h5>" +
+              "<p>" + escapeHtml(extras.join(" | ")) + "</p>" +
+            "</div>"
+          );
+        }
+
+        if (headCoach || assistantCoach) {
+          parts.push(
+            "<div class='modal-line-group'>" +
+              "<h5>Traenare</h5>" +
+              "<p>Head coach: " + escapeHtml(headCoach || "-") + "<br>Assistant coach: " + escapeHtml(assistantCoach || "-") + "</p>" +
+            "</div>"
+          );
+        }
+
+        lineupHtml.push(
+          "<article class='modal-lineup-team-card'>" +
+            "<h4 class='modal-lineup-team-title'>" + escapeHtml(cleanText(team.team_name || "Lag")) + "</h4>" +
+            parts.join("") +
+          "</article>"
+        );
+      }
+
+      lineupsContainer.innerHTML = lineupHtml.join("");
+      sectionToggle(lineupsSection, lineupHtml.length > 0);
+    } else {
+      sectionToggle(lineupsSection, false);
+    }
+
+    // Goalkeepers
+    var gkSection = document.getElementById("modalGoalkeepersSection");
+    var gkContainer = document.getElementById("modalGoalkeepers");
+    if (gkContainer && details.goalkeepers) {
+      var gkCards = [];
+      for (var gkNum in details.goalkeepers) {
+        if (!details.goalkeepers.hasOwnProperty(gkNum)) continue;
+        var gk = details.goalkeepers[gkNum];
+        gkCards.push(
+          "<div class='modal-gk-row'>" +
+            "<div class='gk-name'>#" + escapeHtml(cleanText(gkNum)) + " " + escapeHtml(cleanText(gk.name || "?")) + " (" + escapeHtml(cleanText(gk.team || "?")) + ")</div>" +
+            "<div class='gk-stats'>" + escapeHtml(cleanText(gk.stats || "-")) + "</div>" +
+          "</div>"
+        );
+      }
+      gkContainer.innerHTML = gkCards.join("");
+      sectionToggle(gkSection, gkCards.length > 0);
+    } else {
+      sectionToggle(gkSection, false);
+    }
+
+    // Events (all events by period)
+    var eventsSection = document.getElementById("modalEventsSection");
+    var periodsContainer = document.getElementById("modalPeriods");
+    if (periodsContainer && details.events_by_period) {
+      var periodHtml = [];
+      for (var p = 1; p <= 5; p++) {
+        var periodKey = "period_" + p;
+        var periodEvents = details.events_by_period[periodKey] || [];
+        if (periodEvents.length === 0) continue;
+
+        var eventRows = [];
+        for (var e = 0; e < periodEvents.length; e++) {
+          var evt = periodEvents[e];
+          var eventClass = "modal-event";
+          var category = cleanText(evt.category || "").toLowerCase();
+          if (category === "goal") eventClass += " modal-event-goal";
+          if (category === "penalty") eventClass += " modal-event-penalty";
+          if (category === "powerbreak") eventClass += " modal-event-break";
+
+          eventRows.push(
+            "<div class='" + eventClass + "'>" +
+              "<div class='event-time'>" + escapeHtml(cleanText(evt.time || "-")) + "</div>" +
+              "<div class='event-main'>" +
+                "<div class='event-line'><span class='event-type'>" + escapeHtml(cleanText(evt.type || "-")) + "</span> <span class='event-team'>" + escapeHtml(cleanText(evt.team || "")) + "</span></div>" +
+                "<div class='event-player'>" + escapeHtml(cleanText(evt.player || "")) + "</div>" +
+                "<div class='event-details'>" + escapeHtml(cleanText(evt.details || "")) + "</div>" +
+              "</div>" +
+            "</div>"
+          );
+        }
+
+        periodHtml.push(
+          "<section class='modal-period'>" +
+            "<h4 class='modal-period-title'>Period " + p + "</h4>" +
+            "<div class='modal-events-list'>" + eventRows.join("") + "</div>" +
+          "</section>"
+        );
+      }
+
+      periodsContainer.innerHTML = periodHtml.join("");
+      sectionToggle(eventsSection, periodHtml.length > 0);
+    } else {
+      sectionToggle(eventsSection, false);
+    }
+
+    // Reports
+    var reportsSection = document.getElementById("modalReportsSection");
+    var reportsContainer = document.getElementById("modalReports");
+    if (reportsContainer && details.reports && details.reports.length > 0) {
+      var reportHtml = [];
+      for (var r = 0; r < details.reports.length; r++) {
+        var report = details.reports[r];
+        reportHtml.push(
+          "<a class='modal-report-link' href='" + escapeHtml(cleanText(report.url || "#")) + "' target='_blank' rel='noopener noreferrer'>" +
+            "<span class='report-name'>" + escapeHtml(cleanText(report.name || "Rapport")) + "</span>" +
+            "<span class='report-time'>" + escapeHtml(cleanText(report.created_at || "")) + "</span>" +
+          "</a>"
+        );
+      }
+      reportsContainer.innerHTML = reportHtml.join("");
+      sectionToggle(reportsSection, true);
+    } else {
+      sectionToggle(reportsSection, false);
     }
 
     // Visa detaljer, dölj laddning
