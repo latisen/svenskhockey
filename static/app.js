@@ -361,6 +361,217 @@
     pollInterval = setInterval(pollForUpdates, 30000);
   }
 
+  // ---------------------------------------------------------------------------
+  // 6. Match Details Modal
+  // ---------------------------------------------------------------------------
+
+  var modal = document.getElementById("matchModal");
+  var modalClose = modal ? modal.querySelector(".modal-close") : null;
+  var modalOverlay = modal ? modal.querySelector(".modal-overlay") : null;
+  var modalLoading = modal ? modal.querySelector("#modalLoading") : null;
+  var modalError = modal ? modal.querySelector("#modalError") : null;
+  var modalDetails = modal ? modal.querySelector("#modalDetails") : null;
+
+  /**
+   * Öppnar modalen för en match.
+   */
+  function openMatchModal(matchRow) {
+    if (!modal) return;
+
+    var homeTeam = matchRow.getAttribute("data-home-team");
+    var awayTeam = matchRow.getAttribute("data-away-team");
+    var date = matchRow.getAttribute("data-date");
+    var time = matchRow.getAttribute("data-time");
+
+    if (!homeTeam || !awayTeam || !date || !time) {
+      showModalError("Matchdata saknas");
+      return;
+    }
+
+    // Visa modal med laddningsindikator
+    modal.removeAttribute("aria-hidden");
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+
+    // Visa laddning, dölj detaljer och fel
+    if (modalLoading) modalLoading.removeAttribute("hidden");
+    if (modalError) modalError.setAttribute("hidden", "");
+    if (modalDetails) modalDetails.setAttribute("hidden", "");
+
+    // Hämta matchdetaljer från API
+    fetchMatchDetails(homeTeam, awayTeam, date, time);
+  }
+
+  /**
+   * Stänger modalen.
+   */
+  function closeMatchModal() {
+    if (!modal) return;
+    modal.setAttribute("aria-hidden", "true");
+    modal.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  /**
+   * Visar felmeddelande i modalen.
+   */
+  function showModalError(message) {
+    if (!modalLoading) return;
+    if (!modalError) return;
+
+    modalLoading.setAttribute("hidden", "");
+    modalError.removeAttribute("hidden");
+    modalDetails.setAttribute("hidden", "");
+    document.getElementById("modalErrorText").textContent = message;
+  }
+
+  /**
+   * Hämtar matchdetaljer från API:t.
+   */
+  function fetchMatchDetails(homeTeam, awayTeam, date, time) {
+    var params = new URLSearchParams({
+      home_team: homeTeam,
+      away_team: awayTeam,
+      date: date,
+      time: time,
+    });
+
+    fetch("/api/match-details?" + params.toString(), {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        return resp.json();
+      })
+      .then(function (details) {
+        if (details.error) {
+          showModalError("Kunde inte hämta matchdetaljer: " + details.error);
+          return;
+        }
+
+        displayMatchDetails(details);
+      })
+      .catch(function (err) {
+        console.error("Error fetching match details:", err);
+        showModalError("Kunde inte hämta matchdetaljer. Försök igen senare.");
+      });
+  }
+
+  /**
+   * Visar matchdetaljer i modalen.
+   */
+  function displayMatchDetails(details) {
+    if (!modalDetails) return;
+
+    // Uppdatera titel
+    var title = document.getElementById("modalTitle");
+    if (title) {
+      title.textContent = (details.home_team || "?") + " – " + (details.away_team || "?");
+    }
+
+    // Hemmalag
+    var homeTeamElem = document.getElementById("modalHomeTeam");
+    if (homeTeamElem) homeTeamElem.textContent = details.home_team || "–";
+
+    var homeScoreElem = document.getElementById("modalHomeScore");
+    if (homeScoreElem) {
+      if (details.score) {
+        var scores = details.score.split("-");
+        homeScoreElem.textContent = scores[0] ? scores[0].trim() : "–";
+      } else {
+        homeScoreElem.textContent = "–";
+      }
+    }
+
+    // Bortalag
+    var awayTeamElem = document.getElementById("modalAwayTeam");
+    if (awayTeamElem) awayTeamElem.textContent = details.away_team || "–";
+
+    var awayScoreElem = document.getElementById("modalAwayScore");
+    if (awayScoreElem) {
+      if (details.score) {
+        var scores = details.score.split("-");
+        awayScoreElem.textContent = scores[1] ? scores[1].trim() : "–";
+      } else {
+        awayScoreElem.textContent = "–";
+      }
+    }
+
+    // Datum & Tid
+    var dateTimeElem = document.getElementById("modalDateTime");
+    if (dateTimeElem) {
+      dateTimeElem.textContent = (details.datetime || "–")
+        .replace(/Â/g, "")
+        .trim();
+    }
+
+    // Arena
+    var venueElem = document.getElementById("modalVenue");
+    if (venueElem) {
+      venueElem.textContent = (details.venue || "–")
+        .replace(/Â/g, "")
+        .replace(/<b>|<\/b>/g, "")
+        .trim();
+    }
+
+    // Publik
+    var specElem = document.getElementById("modalSpectators");
+    if (specElem) {
+      specElem.textContent = details.spectators ? details.spectators + " personer" : "–";
+    }
+
+    // Skott på mål
+    var homeShotsElem = document.getElementById("modalHomeShots");
+    if (homeShotsElem) {
+      homeShotsElem.textContent = details.home_shots ? details.home_shots.replace(/<strong>|<\/strong>/g, "") : "–";
+    }
+
+    var awayShotsElem = document.getElementById("modalAwayShots");
+    if (awayShotsElem) {
+      awayShotsElem.textContent = details.away_shots ? details.away_shots.replace(/<strong>|<\/strong>/g, "") : "–";
+    }
+
+    // Link to full details
+    var detailsLink = document.getElementById("modalDetailsLink");
+    if (detailsLink && details.id) {
+      detailsLink.href = "https://stats.swehockey.se/Game/Events/" + details.id;
+    }
+
+    // Visa detaljer, dölj laddning
+    if (modalLoading) modalLoading.setAttribute("hidden", "");
+    if (modalError) modalError.setAttribute("hidden", "");
+    modalDetails.removeAttribute("hidden");
+  }
+
+  // Lägg till click-handler på alla matchrader
+  if (seriesList) {
+    seriesList.addEventListener("click", function (e) {
+      var matchRow = e.target.closest(".match-row");
+      if (matchRow && !matchRow.disabled) {
+        e.preventDefault();
+        openMatchModal(matchRow);
+      }
+    });
+  }
+
+  // Stäng modal när close-knapp klickas
+  if (modalClose) {
+    modalClose.addEventListener("click", closeMatchModal);
+  }
+
+  // Stäng modal när overlay klickas
+  if (modalOverlay) {
+    modalOverlay.addEventListener("click", closeMatchModal);
+  }
+
+  // Stäng modal med Escape
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && modal) {
+      closeMatchModal();
+    }
+  });
+
   // Starta polling när DOM är redo
   if (
     document.readyState === "complete" ||

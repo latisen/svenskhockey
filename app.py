@@ -121,6 +121,45 @@ def reload_matches():
     return redirect(url_for("index"))
 
 
+@app.route("/api/match-details")
+def api_match_details():
+    """
+    Hämtar detaljerad information om en match.
+    
+    Query-parametrar:
+      - home_team: Hemmalag
+      - away_team: Bortalag
+      - date: Datum (YYYY-MM-DD)
+      - time: Tid (HH:MM)
+    """
+    from match_finder import find_match_id, get_match_details
+    
+    home_team = request.args.get("home_team", "").strip()
+    away_team = request.args.get("away_team", "").strip()
+    match_date = request.args.get("date", "").strip()
+    match_time = request.args.get("time", "").strip()
+    
+    if not all([home_team, away_team, match_date, match_time]):
+        return jsonify({"error": "Missing required parameters"}), 400
+    
+    try:
+        # Söka efter match-ID
+        match_id = find_match_id(home_team, away_team, match_date, match_time)
+        if not match_id:
+            return jsonify({"error": "Could not find match"}), 404
+        
+        # Hämta matchdetaljer
+        details = get_match_details(match_id)
+        if not details:
+            return jsonify({"error": "Could not fetch match details"}), 404
+        
+        return jsonify(details)
+    
+    except Exception as e:
+        logger.error(f"Error in match details API: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ---------------------------------------------------------------------------
 # Startpunkt
 # ---------------------------------------------------------------------------

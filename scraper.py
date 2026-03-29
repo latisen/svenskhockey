@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 # ---------------------------------------------------------------------------
 SELECTORS = {
     "base_url": "https://stats.swehockey.se",
-    "games_by_date_url": "https://stats.swehockey.se/GamesByDate/Index/{date}",
+    "games_by_date_url": "https://stats.swehockey.se/GamesByDate/{date}/ByTime/90",
     "main_table_class": "tblContent",   # Tabellen som innehåller alla matcher
     "series_row_class": None,           # Serierader identifieras via cell-antal (1 cell)
     "match_row_classes": ("tdOdd", "tdNormal"),  # CSS-klasser på matchrader

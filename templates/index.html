@@ -138,10 +138,19 @@
 
         <div class="matches-list">
           {% for match in matches %}
-            <div
-              class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}"
+            {% set is_clickable = match.status == "Färdigspelad" or (match.status != "Färdigspelad" and match.result) %}
+            <button
+              class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}{% if not is_clickable %} match-no-details{% endif %}"
               data-home="{{ match.home_team | lower }}"
               data-away="{{ match.away_team | lower }}"
+              data-home-team="{{ match.home_team }}"
+              data-away-team="{{ match.away_team }}"
+              data-date="{{ match.date }}"
+              data-time="{{ match.time }}"
+              data-series="{{ series_name }}"
+              type="button"
+              {% if not is_clickable %}disabled{% endif %}
+              aria-label="{% if is_clickable %}Se detaljer för{% else %}Matcher som inte startat har ingen detaljsida ännu. Se detaljer för{% endif %} {{ match.home_team }} vs {{ match.away_team }}"
             >
               <!-- Tid & Countdown -->
               <div class="match-time-col">
@@ -191,7 +200,7 @@
                   <span class="venue-name">{{ match.venue }}</span>
                 {% endif %}
               </div>
-            </div>
+            </button>
           {% endfor %}
         </div>
       </section>
@@ -209,6 +218,93 @@
   </div>
 
 </main>
+
+<!-- ===== MATCH DETAILS MODAL ===== -->
+<div id="matchModal" class="modal" role="dialog" aria-hidden="true" aria-labelledby="modalTitle">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle" class="modal-title">Matchdetaljer</h2>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Stäng modal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div id="modalLoading" class="modal-loading">
+        <div class="spinner"></div>
+        <p>Laddar matchdetaljer...</p>
+      </div>
+
+      <div id="modalError" class="modal-error" hidden>
+        <p id="modalErrorText"></p>
+      </div>
+
+      <div id="modalDetails" class="modal-details" hidden>
+        <!-- Teams & Score -->
+        <div class="modal-score-section">
+          <div class="modal-teams">
+            <div class="modal-team modal-team-home">
+              <div class="modal-team-name" id="modalHomeTeam"></div>
+              <div class="modal-team-score" id="modalHomeScore"></div>
+            </div>
+            <div class="modal-vs">–</div>
+            <div class="modal-team modal-team-away">
+              <div class="modal-team-name" id="modalAwayTeam"></div>
+              <div class="modal-team-score" id="modalAwayScore"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Match Info -->
+        <div class="modal-info-section">
+          <div class="modal-info-row">
+            <span class="modal-info-label">Datum & Tid:</span>
+            <span class="modal-info-value" id="modalDateTime"></span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Arena:</span>
+            <span class="modal-info-value" id="modalVenue"></span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Publik:</span>
+            <span class="modal-info-value" id="modalSpectators"></span>
+          </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="modal-stats-section">
+          <h3 class="modal-stats-title">Statistik</h3>
+          <div class="modal-stats">
+            <div class="modal-stat">
+              <span class="modal-stat-label">Skott på mål (hemmalag)</span>
+              <span class="modal-stat-value" id="modalHomeShots">–</span>
+            </div>
+            <div class="modal-stat">
+              <span class="modal-stat-label">Skott på mål (bortalag)</span>
+              <span class="modal-stat-value" id="modalAwayShots">–</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Link to full details -->
+        <div class="modal-footer-link">
+          <a id="modalDetailsLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+            Se fullständiga detaljer på swehockey.se
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ===== FOOTER ===== -->
 <footer class="site-footer">
