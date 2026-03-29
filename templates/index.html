@@ -128,9 +128,12 @@
               data-home="{{ match.home_team | lower }}"
               data-away="{{ match.away_team | lower }}"
             >
-              <!-- Tid -->
+              <!-- Tid & Countdown -->
               <div class="match-time-col">
                 <span class="match-time">{{ match.time if match.time else "–" }}</span>
+                {% if match.status != "Färdigspelad" and match.time %}
+                  <span class="match-countdown" data-time="{{ match.time }}">–</span>
+                {% endif %}
               </div>
 
               <!-- Laginfo -->

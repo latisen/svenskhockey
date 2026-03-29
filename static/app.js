@@ -138,6 +138,101 @@
 
   var lastFetchedAt = null;
   var pollInterval = null;
+  var countdownInterval = null;
+
+  /**
+   * Formaterar återstående tid som HH:MM:ss.
+   * t.ex. "00:45:30", "00:00:12"
+   */
+  function formatTimeRemaining(minutes, seconds) {
+    var totalSeconds = minutes * 60 + seconds;
+    var hours = Math.floor(totalSeconds / 3600);
+    var mins = Math.floor((totalSeconds % 3600) / 60);
+    var secs = totalSeconds % 60;
+    
+    // Pad med nolla för att få HH:MM:ss format
+    var h = hours < 10 ? "0" + hours : hours;
+    var m = mins < 10 ? "0" + mins : mins;
+    var s = secs < 10 ? "0" + secs : secs;
+    
+    return h + ":" + m + ":" + s;
+  }
+
+  /**
+   * Uppdaterar countdownen för en enstaka matchrad.
+   */
+  function updateCountdownForRow(row) {
+    var countdownElem = row.querySelector(".match-countdown");
+    if (!countdownElem) return;
+
+    var timeStr = countdownElem.getAttribute("data-time");
+    if (!timeStr) return;
+
+    var status = row.classList.contains("match-played") ? "Färdigspelad" : null;
+    if (status === "Färdigspelad") {
+      countdownElem.setAttribute("hidden", "");
+      return;
+    }
+
+    // Beräkna tid kvar
+    var now = new Date();
+    var today = now.toISOString().split("T")[0];
+
+    // Parse time HH:MM
+    var timeParts = timeStr.split(":");
+    var hour = parseInt(timeParts[0], 10);
+    var minute = parseInt(timeParts[1], 10);
+
+    var matchTime = new Date(today + "T" + timeStr + ":00");
+    var timeRemaining = matchTime - now;
+
+    if (timeRemaining < 0) {
+      // Matchen har redan börjat
+      countdownElem.setAttribute("hidden", "");
+      return;
+    }
+
+    var minutesLeft = Math.floor(timeRemaining / 60000);
+    var secondsLeft = Math.floor((timeRemaining % 60000) / 1000);
+
+    var formatted = formatTimeRemaining(minutesLeft, secondsLeft);
+    countdownElem.textContent = formatted;
+    countdownElem.removeAttribute("hidden");
+
+    // Justera styling baserat på tid kvar
+    countdownElem.classList.remove("match-soon", "match-live");
+    if (minutesLeft === 0 && secondsLeft <= 5) {
+      countdownElem.classList.add("match-live");
+    } else if (minutesLeft <= 15) {
+      countdownElem.classList.add("match-soon");
+    }
+  }
+
+  /**
+   * Uppdaterar alla countdowns på sidan.
+   */
+  function updateAllCountdowns() {
+    var allCountdowns = Array.prototype.slice.call(
+      seriesList.querySelectorAll(".match-countdown")
+    );
+    allCountdowns.forEach(function (elem) {
+      var row = elem.closest(".match-row");
+      if (row) {
+        updateCountdownForRow(row);
+      }
+    });
+  }
+
+  /**
+   * Startar countdown-uppdatering var sekund.
+   */
+  function startCountdownUpdates() {
+    // Första uppdatering omedelbar
+    updateAllCountdowns();
+
+    // Sedan var sekund
+    countdownInterval = setInterval(updateAllCountdowns, 1000);
+  }
 
   /**
    * Hämtar uppdateringar från API:t och uppdaterar matchkorten.
@@ -226,6 +321,9 @@
       } else {
         row.classList.add("match-upcoming");
       }
+
+      // Uppdatera countdown efter status-ändring
+      updateCountdownForRow(row);
     });
   }
 
@@ -249,10 +347,13 @@
   }
 
   /**
-   * Starta polling när sidan laddat. Uppdatera var 30:e sekund.
+   * Starta polling och countdown när sidan laddat. Uppdatera var 30:e sekund.
    */
   function startPolling() {
-    // Första uppdatering efter 30 sekunder
+    // Starta countdown-uppdateringar var sekund
+    startCountdownUpdates();
+
+    // Första API-uppdatering efter 30 sekunder
     pollInterval = setInterval(pollForUpdates, 30000);
   }
 
