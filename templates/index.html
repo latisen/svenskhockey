@@ -18,11 +18,26 @@
       </div>
     </div>
 
+    <!-- Datumväljare -->
+    <div class="date-picker">
+      <a href="/?date={{ prev_date }}" class="date-nav-btn date-prev" title="Föregående dag">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </a>
+      <span class="date-display">{{ today_iso }}</span>
+      <a href="/?date={{ next_date }}" class="date-nav-btn date-next" title="Nästa dag">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </a>
+    </div>
+
     <div class="header-actions">
       {% if fetched_at %}
         <span class="last-updated">Uppdaterad {{ fetched_at }}</span>
       {% endif %}
-      <a href="{{ url_for('reload_matches') }}" class="btn btn-reload" id="reloadBtn">
+      <a href="/reload?date={{ today_iso }}" class="btn btn-reload" id="reloadBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="23 4 23 10 17 10"/>
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>

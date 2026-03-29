@@ -9,7 +9,7 @@ Exponerar:
 import logging
 from datetime import date
 
-from flask import Flask, render_template, redirect, url_for, jsonify
+from flask import Flask, render_template, redirect, url_for, jsonify, request
 
 from scraper import fetch_todays_matches, group_matches_by_series, clear_cache
 
@@ -32,12 +32,33 @@ logger = logging.getLogger(__name__)
 
 @app.route("/")
 def index():
-    """Hämtar dagens matcher (med cache) och renderar startsidan."""
+    """Hämtar matcher för valt datum och renderar startsidan."""
+    from datetime import timedelta
+    
+    # Hämta datumsparameter från URL, annars använd idag
+    selected_date = request.args.get("date")
+    
     today = date.today()
-    today_display = today.strftime("%A %d %B %Y")  # t.ex. "Sunday 29 March 2026"
-    today_iso = today.strftime("%Y-%m-%d")
+    if selected_date:
+        try:
+            # Validera datumsformat
+            selected = date.fromisoformat(selected_date)
+            today_display = selected.strftime("%A %d %B %Y")
+            today_iso = selected.strftime("%Y-%m-%d")
+        except ValueError:
+            # Ogiltigt datum, använd idag
+            today_display = today.strftime("%A %d %B %Y")
+            today_iso = today.strftime("%Y-%m-%d")
+    else:
+        today_display = today.strftime("%A %d %B %Y")
+        today_iso = today.strftime("%Y-%m-%d")
 
-    matches, fetched_at, error = fetch_todays_matches()
+    # Beräkna föregående och nästa datum för navigering
+    selected_obj = date.fromisoformat(today_iso)
+    prev_date = (selected_obj - timedelta(days=1)).strftime("%Y-%m-%d")
+    next_date = (selected_obj + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    matches, fetched_at, error = fetch_todays_matches(target_date=today_iso)
     grouped = group_matches_by_series(matches) if matches else {}
 
     total_matches = len(matches)
@@ -49,6 +70,8 @@ def index():
         grouped=grouped,
         today_display=today_display,
         today_iso=today_iso,
+        prev_date=prev_date,
+        next_date=next_date,
         fetched_at=fetched_at,
         error=error,
         total_matches=total_matches,
@@ -60,7 +83,10 @@ def index():
 @app.route("/api/matches")
 def api_matches():
     """JSON API för live-uppdateringar av matcher. Förbi-cache för att få senaste data."""
-    matches, fetched_at, error = fetch_todays_matches(force_refresh=True)
+    # Hämta datumsparameter
+    selected_date = request.args.get("date")
+    
+    matches, fetched_at, error = fetch_todays_matches(force_refresh=True, target_date=selected_date)
     grouped = group_matches_by_series(matches) if matches else {}
 
     # Konvertera Match-dataclass-objekt till dict
@@ -88,7 +114,10 @@ def api_matches():
 @app.route("/reload")
 def reload_matches():
     """Rensar cachen och tvingar en ny hämtning av matchdata."""
+    selected_date = request.args.get("date")
     clear_cache()
+    if selected_date:
+        return redirect(url_for("index", date=selected_date))
     return redirect(url_for("index"))
 
 

@@ -238,7 +238,11 @@
    * Hämtar uppdateringar från API:t och uppdaterar matchkorten.
    */
   function pollForUpdates() {
-    fetch("/api/matches", {
+    // Hämta current datum från URL
+    var params = new URLSearchParams(window.location.search);
+    var currentDate = params.get("date") || "";
+
+    fetch("/api/matches" + (currentDate ? "?date=" + encodeURIComponent(currentDate) : ""), {
       method: "GET",
       headers: { "Accept": "application/json" },
     })

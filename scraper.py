@@ -198,9 +198,13 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
     return matches
 
 
-def fetch_todays_matches(force_refresh: bool = False) -> tuple[list[Match], str, Optional[str]]:
+def fetch_todays_matches(force_refresh: bool = False, target_date: Optional[str] = None) -> tuple[list[Match], str, Optional[str]]:
     """
-    Hämtar och returnerar dagens matcher.
+    Hämtar och returnerar matcher för ett givet datum.
+
+    Args:
+        force_refresh: Tvinga ny hämtning, ignorera cache
+        target_date: Datum på format YYYY-MM-DD. Om None används idag.
 
     Returnerar:
         (matches, fetched_at_str, error_message)
@@ -208,8 +212,12 @@ def fetch_todays_matches(force_refresh: bool = False) -> tuple[list[Match], str,
         - fetched_at_str: tidsstämpel för senaste hämtning
         - error_message: felmeddelande-sträng om något gick fel, annars None
     """
-    today = date.today()
-    today_str = today.strftime("%Y-%m-%d")
+    if target_date is None:
+        today = date.today()
+        today_str = today.strftime("%Y-%m-%d")
+    else:
+        today_str = target_date
+    
     cache_key = f"matches_{today_str}"
 
     if not force_refresh:
