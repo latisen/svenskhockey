@@ -16,9 +16,10 @@ Om HTML-strukturen ändras: justera SELECTORS-konstanten nedan.
 import re
 import time
 import logging
-from datetime import date
+from datetime import date, datetime
 from dataclasses import dataclass, field
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from bs4 import BeautifulSoup
@@ -35,6 +36,7 @@ SELECTORS = {
 }
 
 logger = logging.getLogger(__name__)
+STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
 # ---------------------------------------------------------------------------
 # Datamodell
@@ -227,7 +229,7 @@ def fetch_todays_matches(force_refresh: bool = False, target_date: Optional[str]
         - error_message: felmeddelande-sträng om något gick fel, annars None
     """
     if target_date is None:
-        today = date.today()
+        today = datetime.now(STOCKHOLM_TZ).date()
         today_str = today.strftime("%Y-%m-%d")
     else:
         today_str = target_date
@@ -268,7 +270,7 @@ def fetch_todays_matches(force_refresh: bool = False, target_date: Optional[str]
 
         matches = _parse_matches_from_table(table, today_str)
 
-        fetched_at = time.strftime("%H:%M:%S")
+        fetched_at = datetime.now(STOCKHOLM_TZ).strftime("%H:%M:%S")
         result_data = {"matches": matches, "fetched_at": fetched_at}
         _set_cache(cache_key, result_data)
 

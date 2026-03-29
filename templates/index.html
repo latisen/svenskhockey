@@ -153,7 +153,7 @@
               {% if not is_clickable %}disabled{% endif %}
               aria-label="{% if is_clickable %}Se detaljer för{% else %}Matcher som inte startat har ingen detaljsida ännu. Se detaljer för{% endif %} {{ match.home_team }} vs {{ match.away_team }}"
             >
-              <!-- Tid & Countdown -->
+              <!-- Tid & Countdown (vänster) -->
               <div class="match-time-col">
                 <span class="match-time">{{ match.time if match.time else "–" }}</span>
                 {% if match.status != "Färdigspelad" and match.time %}
@@ -161,45 +161,46 @@
                 {% endif %}
               </div>
 
-              <!-- Laginfo -->
-              <div class="match-teams-col">
-                <div class="match-teams">
-                  <span class="team team-home">{{ match.home_team }}</span>
-                  <span class="match-vs">–</span>
-                  <span class="team team-away">{{ match.away_team }}</span>
+              <!-- Laginfo & Arena (mitten) -->
+              <div class="match-center">
+                <div class="match-teams-col">
+                  <div class="match-team-row">
+                    <span class="team team-home">{{ match.home_team }}</span>
+                  </div>
+                  <div class="match-team-row">
+                    <span class="team team-away">{{ match.away_team }}</span>
+                  </div>
                 </div>
+                {% if match.venue %}
+                  <div class="match-venue-info">
+                    <svg class="venue-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span class="venue-name">{{ match.venue }}</span>
+                  </div>
+                {% endif %}
                 {% if match.round_info %}
                   <span class="match-round">{{ match.round_info }}</span>
                 {% endif %}
               </div>
 
-              <!-- Resultat & Status -->
-              <div class="match-result-col">
-                {% if match.result %}
-                  <span class="match-result">{{ match.result }}</span>
-                {% else %}
-                  <span class="match-result-placeholder">vs</span>
-                {% endif %}
-              </div>
-
-              <!-- Status-badge -->
-              <div class="match-status-col">
-                {% if match.status == "Färdigspelad" %}
-                  <span class="badge badge-played">Färdigspelad</span>
-                {% else %}
-                  <span class="badge badge-upcoming">Spelas idag</span>
-                {% endif %}
-              </div>
-
-              <!-- Arena -->
-              <div class="match-venue-col">
-                {% if match.venue %}
-                  <svg class="venue-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                  </svg>
-                  <span class="venue-name">{{ match.venue }}</span>
-                {% endif %}
+              <!-- Resultat & Status (höger) -->
+              <div class="match-right">
+                <div class="match-result-col">
+                  {% if match.result %}
+                    <span class="match-result">{{ match.result }}</span>
+                  {% else %}
+                    <span class="match-result-placeholder">–</span>
+                  {% endif %}
+                </div>
+                <div class="match-status-col">
+                  {% if match.status == "Färdigspelad" %}
+                    <span class="badge badge-played">Färdig</span>
+                  {% else %}
+                    <span class="badge badge-upcoming">Idag</span>
+                  {% endif %}
+                </div>
               </div>
             </button>
           {% endfor %}
@@ -245,7 +246,7 @@
       </div>
 
       <div id="modalDetails" class="modal-details" hidden>
-        <!-- Teams & Score -->
+        <!-- Alltid synlig: Score -->
         <div class="modal-score-section">
           <div class="modal-teams">
             <div class="modal-team modal-team-home">
@@ -260,7 +261,7 @@
           </div>
         </div>
 
-        <!-- Match Info -->
+        <!-- Alltid synlig: Match Info & Statistics -->
         <div class="modal-info-section">
           <div class="modal-info-row">
             <span class="modal-info-label">Datum & Tid:</span>
@@ -276,46 +277,108 @@
           </div>
         </div>
 
-        <!-- Statistics -->
+        <!-- Alltid synlig: Statistics -->
         <div class="modal-stats-section">
           <h3 class="modal-stats-title">Statistik</h3>
           <div class="modal-stats">
             <div class="modal-stat">
-              <span class="modal-stat-label">Skott på mål (hemmalag)</span>
+              <span class="modal-stat-label">Hemmalag</span>
               <span class="modal-stat-value" id="modalHomeShots">–</span>
+              <span class="modal-stat-sublabel">Skott</span>
             </div>
             <div class="modal-stat">
-              <span class="modal-stat-label">Skott på mål (bortalag)</span>
+              <span class="modal-stat-label">Bortalag</span>
               <span class="modal-stat-value" id="modalAwayShots">–</span>
+              <span class="modal-stat-sublabel">Skott</span>
             </div>
           </div>
         </div>
 
+        <!-- Alltid synlig: Key Stats (visas i två rutor) -->
+        <div class="modal-key-stats-boxes" id="modalKeyStatsBoxes">
+          <div class="modal-key-stat-box modal-key-stat-home">
+            <h4 class="modal-key-stat-box-title">Hemmalag</h4>
+            <div class="modal-key-stat-box-content" id="modalKeyStatsHome"></div>
+          </div>
+          <div class="modal-key-stat-box modal-key-stat-away">
+            <h4 class="modal-key-stat-box-title">Bortalag</h4>
+            <div class="modal-key-stat-box-content" id="modalKeyStatsAway"></div>
+          </div>
+        </div>
+
+        <!-- Fliksystem -->
+        <div class="modal-tabs-container">
+          <div class="modal-tabs">
+            <button class="modal-tab-btn modal-tab-active" data-tab="events">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              Matchhändelser
+            </button>
+            <button class="modal-tab-btn" data-tab="officials">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              Domare
+            </button>
+            <button class="modal-tab-btn" data-tab="lineups">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              Laguppställning
+            </button>
+            <button class="modal-tab-btn" data-tab="goalkeepers">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="1"/>
+                <path d="M12 1v6m0 6v6"/>
+                <path d="M4.22 4.22l4.24 4.24m5.08 0l4.24-4.24"/>
+                <path d="M1 12h6m6 0h6"/>
+                <path d="M4.22 19.78l4.24-4.24m5.08 0l4.24 4.24"/>
+              </svg>
+              Målvakter
+            </button>
+          </div>
+
+          <!-- Tab Content: Events -->
+          <div class="modal-tab-content modal-tab-active" id="tab-events">
+            <div class="modal-events-section" id="modalEventsSection">
+              <div class="modal-periods" id="modalPeriods"></div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Officials -->
+          <div class="modal-tab-content" id="tab-officials">
+            <div class="modal-officials-section" id="modalOfficialsSection">
+              <div class="modal-officials" id="modalOfficials"></div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Lineups -->
+          <div class="modal-tab-content" id="tab-lineups">
+            <div class="modal-lineups-section" id="modalLineupsSection">
+              <div class="modal-lineups-grid" id="modalLineups"></div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Goalkeepers -->
+          <div class="modal-tab-content" id="tab-goalkeepers">
+            <div class="modal-goalkeepers-section" id="modalGoalkeepersSection">
+              <div class="modal-goalkeepers" id="modalGoalkeepers"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Stats (Optional - kan också vara på egen tab) -->
         <div class="modal-key-stats-section" id="modalKeyStatsSection" hidden>
           <h3 class="modal-section-title">Nyckelstatistik</h3>
           <div class="modal-key-stats-grid" id="modalKeyStatsGrid"></div>
         </div>
 
-        <div class="modal-officials-section" id="modalOfficialsSection" hidden>
-          <h3 class="modal-section-title">Domare</h3>
-          <div class="modal-officials" id="modalOfficials"></div>
-        </div>
-
-        <div class="modal-lineups-section" id="modalLineupsSection" hidden>
-          <h3 class="modal-section-title">Laguppstaellningar</h3>
-          <div class="modal-lineups-grid" id="modalLineups"></div>
-        </div>
-
-        <div class="modal-goalkeepers-section" id="modalGoalkeepersSection" hidden>
-          <h3 class="modal-section-title">Maalvaktsstatistik</h3>
-          <div class="modal-goalkeepers" id="modalGoalkeepers"></div>
-        </div>
-
-        <div class="modal-events-section" id="modalEventsSection" hidden>
-          <h3 class="modal-section-title">Matchhaendelser</h3>
-          <div class="modal-periods" id="modalPeriods"></div>
-        </div>
-
+        <!-- Reports -->
         <div class="modal-reports-section" id="modalReportsSection" hidden>
           <h3 class="modal-section-title">Rapporter</h3>
           <div class="modal-reports" id="modalReports"></div>

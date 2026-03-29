@@ -7,7 +7,8 @@ Exponerar:
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from flask import Flask, render_template, redirect, url_for, jsonify, request
 
@@ -24,6 +25,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
+
+
+def stockholm_today() -> date:
+    """Returnerar dagens datum i tidszonen Europe/Stockholm."""
+    return datetime.now(STOCKHOLM_TZ).date()
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +45,7 @@ def index():
     # Hämta datumsparameter från URL, annars använd idag
     selected_date = request.args.get("date")
     
-    today = date.today()
+    today = stockholm_today()
     if selected_date:
         try:
             # Validera datumsformat

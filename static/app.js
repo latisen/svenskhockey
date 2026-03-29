@@ -139,6 +139,82 @@
   var lastFetchedAt = null;
   var pollInterval = null;
   var countdownInterval = null;
+  var STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+  var stockholmDateTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  function getStockholmDateTimeParts(date) {
+    var parts = stockholmDateTimeFormatter.formatToParts(date);
+    var values = {};
+
+    parts.forEach(function (part) {
+      if (part.type !== "literal") {
+        values[part.type] = part.value;
+      }
+    });
+
+    return values;
+  }
+
+  function getStockholmTodayIso() {
+    var nowParts = getStockholmDateTimeParts(new Date());
+    return nowParts.year + "-" + nowParts.month + "-" + nowParts.day;
+  }
+
+  function getStockholmOffsetMilliseconds(date) {
+    var parts = getStockholmDateTimeParts(date);
+    var stockholmAsUtc = Date.UTC(
+      parseInt(parts.year, 10),
+      parseInt(parts.month, 10) - 1,
+      parseInt(parts.day, 10),
+      parseInt(parts.hour, 10),
+      parseInt(parts.minute, 10),
+      parseInt(parts.second, 10)
+    );
+
+    return stockholmAsUtc - date.getTime();
+  }
+
+  function createStockholmDateTime(dateStr, timeStr) {
+    var dateParts = (dateStr || getStockholmTodayIso()).split("-");
+    var timeParts = (timeStr || "00:00").split(":");
+    var year = parseInt(dateParts[0], 10);
+    var month = parseInt(dateParts[1], 10);
+    var day = parseInt(dateParts[2], 10);
+    var hour = parseInt(timeParts[0], 10);
+    var minute = parseInt(timeParts[1], 10);
+    var second = parseInt(timeParts[2] || "0", 10);
+
+    if (
+      isNaN(year) ||
+      isNaN(month) ||
+      isNaN(day) ||
+      isNaN(hour) ||
+      isNaN(minute) ||
+      isNaN(second)
+    ) {
+      return null;
+    }
+
+    var utcCandidate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    var offset = getStockholmOffsetMilliseconds(utcCandidate);
+    var adjustedDate = new Date(utcCandidate.getTime() - offset);
+    var adjustedOffset = getStockholmOffsetMilliseconds(adjustedDate);
+
+    if (adjustedOffset !== offset) {
+      adjustedDate = new Date(utcCandidate.getTime() - adjustedOffset);
+    }
+
+    return adjustedDate;
+  }
 
   /**
    * Formaterar återstående tid som HH:MM:ss.
@@ -166,6 +242,7 @@
     if (!countdownElem) return;
 
     var timeStr = countdownElem.getAttribute("data-time");
+    var dateStr = row.getAttribute("data-date") || getStockholmTodayIso();
     if (!timeStr) return;
 
     var status = row.classList.contains("match-played") ? "Färdigspelad" : null;
@@ -176,15 +253,10 @@
 
     // Beräkna tid kvar
     var now = new Date();
-    var today = now.toISOString().split("T")[0];
+    var matchTime = createStockholmDateTime(dateStr, timeStr);
+    if (!matchTime) return;
 
-    // Parse time HH:MM
-    var timeParts = timeStr.split(":");
-    var hour = parseInt(timeParts[0], 10);
-    var minute = parseInt(timeParts[1], 10);
-
-    var matchTime = new Date(today + "T" + timeStr + ":00");
-    var timeRemaining = matchTime - now;
+    var timeRemaining = matchTime.getTime() - now.getTime();
 
     if (timeRemaining < 0) {
       // Matchen har redan börjat
@@ -265,6 +337,10 @@
 
         // Uppdatera matchrader
         updateMatchRows(data.matches);
+        
+        // Re-checka om det finns live-matcher efter uppdatering
+        // (för att kunna stoppa polling om all matcher blev färdigspelade)
+        updatePollingStatus();
       })
       .catch(function (err) {
         console.error("Error polling updates:", err);
@@ -351,24 +427,76 @@
   }
 
   /**
-   * Starta polling och countdown när sidan laddat. Uppdatera var 30:e sekund.
+   * Checkar om det finns någon match som är "live" (pågår just nu).
+   * En match är live om:
+   * - Den är NOT "Färdigspelad"
+   * - OCH tiden för matchstart har passerat (countdown visar att tiden är här)
+   */
+  function hasLiveMatches() {
+    var allCountdowns = Array.prototype.slice.call(
+      seriesList.querySelectorAll(".match-countdown")
+    );
+    
+    for (var i = 0; i < allCountdowns.length; i++) {
+      var countdownElem = allCountdowns[i];
+      var row = countdownElem.closest(".match-row");
+      
+      if (!row) continue;
+      
+      var timeStr = countdownElem.getAttribute("data-time");
+      var dateStr = row.getAttribute("data-date") || getStockholmTodayIso();
+      if (!timeStr) continue;
+      
+      // Om raden är färdigspelad, skippa
+      if (row.classList.contains("match-played")) continue;
+      
+      // Beräkna tid kvar
+      var now = new Date();
+      var matchTime = createStockholmDateTime(dateStr, timeStr);
+      if (!matchTime) continue;
+
+      var timeRemaining = matchTime.getTime() - now.getTime();
+      
+      // Om tiden för matchstart har passerat (timeRemaining <= 0), då pågår den
+      if (timeRemaining <= 0) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Starta eller stoppa polling baserat på om det finns live-matcher.
+   */
+  function updatePollingStatus() {
+    var hasLive = hasLiveMatches();
+    
+    if (hasLive && !pollInterval) {
+      // Starta polling
+      pollInterval = setInterval(pollForUpdates, 60000); // 60 sekunder
+      console.log("Live-polling started");
+    } else if (!hasLive && pollInterval) {
+      // Stoppa polling
+      clearInterval(pollInterval);
+      pollInterval = null;
+      console.log("Live-polling stopped");
+    }
+  }
+
+  /**
+   * Starta polling och countdown när sidan laddat. Uppdatera live-matcher varje minut.
    */
   function startPolling() {
     // Starta countdown-uppdateringar var sekund
     startCountdownUpdates();
 
-    // Första API-uppdatering efter 30 sekunder
-    pollInterval = setInterval(pollForUpdates, 30000);
+    // Checka initialt om det finns live-matcher och starta polling isåfall
+    updatePollingStatus();
+    
+    // Checka status var 10 sekund för att börja/stoppa polling när behövligt
+    setInterval(updatePollingStatus, 10000);
   }
-
-  // ---------------------------------------------------------------------------
-  // 6. Match Details Modal
-  // ---------------------------------------------------------------------------
-
-  var modal = document.getElementById("matchModal");
-  var modalClose = modal ? modal.querySelector(".modal-close") : null;
-  var modalOverlay = modal ? modal.querySelector(".modal-overlay") : null;
-  var modalLoading = modal ? modal.querySelector("#modalLoading") : null;
   var modalError = modal ? modal.querySelector("#modalError") : null;
   var modalDetails = modal ? modal.querySelector("#modalDetails") : null;
 
@@ -398,6 +526,11 @@
     if (modalLoading) modalLoading.removeAttribute("hidden");
     if (modalError) modalError.setAttribute("hidden", "");
     if (modalDetails) modalDetails.setAttribute("hidden", "");
+
+    // Välja first tab och starta tab-systemet
+    if (document.querySelector("[data-tab='events']")) {
+      switchModalTab("events");
+    }
 
     // Hämta matchdetaljer från API (med match_id om tillgängligt)
     fetchMatchDetails(homeTeam, awayTeam, date, time, matchId);
@@ -566,30 +699,49 @@
       detailsLink.href = "https://stats.swehockey.se/Game/Events/" + details.id;
     }
 
-    // Key stats (PP, PIM, saves)
-    var keyStatsSection = document.getElementById("modalKeyStatsSection");
-    var keyStatsGrid = document.getElementById("modalKeyStatsGrid");
-    if (keyStatsGrid && details.summary_stats) {
-      var statRows = [];
+    // Key stats (PP, PIM, saves) - Render in two boxes
+    var keyStatsHomeBox = document.getElementById("modalKeyStatsHome");
+    var keyStatsAwayBox = document.getElementById("modalKeyStatsAway");
+    var keyStatsBoxes = document.getElementById("modalKeyStatsBoxes");
+    
+    if ((keyStatsHomeBox || keyStatsAwayBox) && details.summary_stats && keyStatsBoxes) {
+      var homeStatRows = [];
+      var awayStatRows = [];
       var keys = ["save_percentage", "pim", "powerplay"];
+      
       for (var s = 0; s < keys.length; s++) {
         var key = keys[s];
         var stat = details.summary_stats[key];
         if (!stat) continue;
-        statRows.push(
-          "<div class='modal-key-stat-card'>" +
-            "<div class='modal-key-stat-label'>" + escapeHtml(cleanText(stat.label || key)) + "</div>" +
-            "<div class='modal-key-stat-values'>" +
-              "<span>Hemma: <strong>" + escapeHtml(cleanText(stat.home || "-")) + "</strong></span>" +
-              "<span>Borta: <strong>" + escapeHtml(cleanText(stat.away || "-")) + "</strong></span>" +
-            "</div>" +
+        
+        var homeValue = escapeHtml(cleanText(stat.home || "-"));
+        var awayValue = escapeHtml(cleanText(stat.away || "-"));
+        var label = escapeHtml(cleanText(stat.label || key));
+        
+        homeStatRows.push(
+          "<div class='modal-key-stat-row'>" +
+            "<span class='modal-key-stat-row-label'>" + label + "</span>" +
+            "<span class='modal-key-stat-row-value'>" + homeValue + "</span>" +
+          "</div>"
+        );
+        
+        awayStatRows.push(
+          "<div class='modal-key-stat-row'>" +
+            "<span class='modal-key-stat-row-label'>" + label + "</span>" +
+            "<span class='modal-key-stat-row-value'>" + awayValue + "</span>" +
           "</div>"
         );
       }
-      keyStatsGrid.innerHTML = statRows.join("");
-      sectionToggle(keyStatsSection, statRows.length > 0);
-    } else {
-      sectionToggle(keyStatsSection, false);
+      
+      if (homeStatRows.length > 0) {
+        if (keyStatsHomeBox) keyStatsHomeBox.innerHTML = homeStatRows.join("");
+        if (keyStatsAwayBox) keyStatsAwayBox.innerHTML = awayStatRows.join("");
+        keyStatsBoxes.style.display = "grid";
+      } else {
+        keyStatsBoxes.style.display = "none";
+      }
+    } else if (keyStatsBoxes) {
+      keyStatsBoxes.style.display = "none";
     }
 
     // Officials
@@ -770,6 +922,57 @@
     if (modalLoading) modalLoading.setAttribute("hidden", "");
     if (modalError) modalError.setAttribute("hidden", "");
     modalDetails.removeAttribute("hidden");
+
+    // Initialisera flikar
+    initializeModalTabs();
+  }
+
+  /**
+   * Initialiserar flikväxlings-systemet i modalen.
+   */
+  function initializeModalTabs() {
+    var tabButtons = Array.prototype.slice.call(
+      document.querySelectorAll(".modal-tab-btn")
+    );
+    
+    tabButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var tabName = btn.getAttribute("data-tab");
+        switchModalTab(tabName);
+      });
+    });
+  }
+
+  /**
+   * Byter till en specifik flik i modalen.
+   */
+  function switchModalTab(tabName) {
+    // Dölj alla tabs
+    var allTabs = Array.prototype.slice.call(
+      document.querySelectorAll(".modal-tab-content")
+    );
+    allTabs.forEach(function (tab) {
+      tab.classList.remove("modal-tab-active");
+    });
+
+    // Deaktivera alla knappor
+    var allButtons = Array.prototype.slice.call(
+      document.querySelectorAll(".modal-tab-btn")
+    );
+    allButtons.forEach(function (btn) {
+      btn.classList.remove("modal-tab-active");
+    });
+
+    // Aktivera vald tab och knapp
+    var activeTab = document.getElementById("tab-" + tabName);
+    var activeBtn = document.querySelector("[data-tab='" + tabName + "']");
+
+    if (activeTab) {
+      activeTab.classList.add("modal-tab-active");
+    }
+    if (activeBtn) {
+      activeBtn.classList.add("modal-tab-active");
+    }
   }
 
   // Lägg till click-handler på alla matchrader
