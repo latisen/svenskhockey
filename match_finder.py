@@ -377,28 +377,30 @@ def _extract_lineups(match_id: str) -> dict:
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Domare/linjedomare
+        # Domare/linjedomare: läs bara rena label-värde-rader för att undvika
+        # den hopslagna "allt i en rad"-texten i vissa tabeller.
+        referees = []
+        linesmen = []
         for row in soup.find_all("tr"):
             cells = [_clean_text(c.get_text(" ", strip=True)) for c in row.find_all(["td", "th"])]
-            if not cells:
+            if len(cells) != 2:
                 continue
 
-            row_text = " | ".join(cells)
-            if "Referee(s)" in row_text and "Linesmen" in row_text:
-                refs = ""
-                lines = ""
-                ref_match = re.search(r'Referee\(s\)\s*:?\s*(.*?)\s*Linesmen', row_text)
-                line_match = re.search(r'Linesmen\s*:?\s*(.*)$', row_text)
-                if ref_match:
-                    refs = _clean_text(ref_match.group(1))
-                if line_match:
-                    lines = _clean_text(line_match.group(1))
+            label = cells[0].rstrip(":").strip()
+            value = cells[1].strip()
+            if not value:
+                continue
 
-                if refs:
-                    data["officials"]["referees"] = [n.strip() for n in refs.split(",") if n.strip()]
-                if lines:
-                    data["officials"]["linesmen"] = [n.strip() for n in lines.split(",") if n.strip()]
+            if label == "Referee(s)":
+                referees = [n.strip() for n in value.split(",") if n.strip()]
+            elif label == "Linesmen":
+                linesmen = [n.strip() for n in value.split(",") if n.strip()]
+
+            if referees and linesmen:
                 break
+
+        data["officials"]["referees"] = referees
+        data["officials"]["linesmen"] = linesmen
 
         # Välj tabellen som innehåller själva line up-strukturen
         lineup_table = None
