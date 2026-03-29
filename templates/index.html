@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Svenska Hockeymatcher – {{ today_iso }}{% endblock %}
+
+{% block content %}
+
+<!-- ===== HEADER ===== -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+      </svg>
+      <div>
+        <h1 class="site-title">Svenska Hockeymatcher</h1>
+        <p class="site-date">{{ today_display }}</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      {% if fetched_at %}
+        <span class="last-updated">Uppdaterad {{ fetched_at }}</span>
+      {% endif %}
+      <a href="{{ url_for('reload_matches') }}" class="btn btn-reload" id="reloadBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Ladda om
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<main class="main-content">
+
+  <!-- Statistikrad -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <span class="stat-value">{{ total_matches }}</span>
+      <span class="stat-label">Matcher totalt</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-value stat-played">{{ played }}</span>
+      <span class="stat-label">Färdigspelad</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-value stat-upcoming">{{ upcoming }}</span>
+      <span class="stat-label">Kommande</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-value stat-series">{{ grouped | length }}</span>
+      <span class="stat-label">Serier</span>
+    </div>
+  </div>
+
+  <!-- Sökruta -->
+  <div class="search-container">
+    <div class="search-wrapper">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input
+        type="text"
+        id="searchInput"
+        class="search-input"
+        placeholder="Sök lag, t.ex. Djurgårdens IF..."
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Sök efter lag"
+      />
+      <button class="search-clear" id="searchClear" aria-label="Rensa sökning" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Felmeddelande -->
+  {% if error %}
+    <div class="alert alert-error" role="alert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Kunde inte hämta matcher</strong>
+        <p>{{ error }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Tom state (inga matcher alls) -->
+  {% if not error and grouped | length == 0 %}
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <line x1="3" y1="9" x2="21" y2="9"/>
+        <line x1="9" y1="21" x2="9" y2="9"/>
+      </svg>
+      <h2>Inga matcher idag</h2>
+      <p>Det verkar inte spelas några matcher på stats.swehockey.se idag.</p>
+    </div>
+  {% endif %}
+
+  <!-- ===== SERIE-SEKTIONER ===== -->
+  <div id="seriesList">
+    {% for series_name, matches in grouped.items() %}
+      <section class="series-card" data-series="{{ series_name }}">
+        <div class="series-header">
+          <h2 class="series-title">{{ series_name }}</h2>
+          <span class="series-count">{{ matches | length }} match{{ "er" if matches | length != 1 else "" }}</span>
+        </div>
+
+        <div class="matches-list">
+          {% for match in matches %}
+            <div
+              class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}"
+              data-home="{{ match.home_team | lower }}"
+              data-away="{{ match.away_team | lower }}"
+            >
+              <!-- Tid / Status-badge -->
+              <div class="match-time-col">
+                <span class="match-time">{{ match.time if match.time else "–" }}</span>
+                {% if match.status == "Färdigspelad" %}
+                  <span class="badge badge-played">Färdigspelad</span>
+                {% else %}
+                  <span class="badge badge-upcoming">Spelas idag</span>
+                {% endif %}
+              </div>
+
+              <!-- Laginfo -->
+              <div class="match-teams-col">
+                <div class="match-teams">
+                  <span class="team team-home">{{ match.home_team }}</span>
+                  <span class="match-vs">–</span>
+                  <span class="team team-away">{{ match.away_team }}</span>
+                </div>
+                {% if match.round_info %}
+                  <span class="match-round">{{ match.round_info }}</span>
+                {% endif %}
+              </div>
+
+              <!-- Resultat -->
+              <div class="match-result-col">
+                {% if match.result %}
+                  <span class="match-result">{{ match.result }}</span>
+                {% else %}
+                  <span class="match-result-placeholder">vs</span>
+                {% endif %}
+              </div>
+
+              <!-- Arena -->
+              <div class="match-venue-col">
+                {% if match.venue %}
+                  <svg class="venue-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <span class="venue-name">{{ match.venue }}</span>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  </div>
+
+  <!-- Tom state vid sökning -->
+  <div id="noResultsMsg" class="empty-state" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8"/>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <h2>Inga matcher hittades</h2>
+    <p>Inga lag matchar din sökning. Prova ett annat lagnamn.</p>
+  </div>
+
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="site-footer">
+  <p>Data hämtad från <a href="https://stats.swehockey.se" target="_blank" rel="noopener noreferrer">stats.swehockey.se</a></p>
+</footer>
+
+{% endblock %}
