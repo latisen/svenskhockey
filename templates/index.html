@@ -138,7 +138,7 @@
 
         <div class="matches-list">
           {% for match in matches %}
-            {% set is_clickable = match.match_id and (match.status == "Färdigspelad" or match.result) %}
+            {% set is_clickable = match.match_id %}
             <button
               class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}{% if not is_clickable %} match-no-details{% endif %}"
               data-home="{{ match.home_team | lower }}"

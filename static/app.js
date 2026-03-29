@@ -497,6 +497,10 @@
     // Checka status var 10 sekund för att börja/stoppa polling när behövligt
     setInterval(updatePollingStatus, 10000);
   }
+  var modal = document.getElementById("matchModal");
+  var modalClose = modal ? modal.querySelector("#modalClose") : null;
+  var modalOverlay = modal ? modal.querySelector(".modal-overlay") : null;
+  var modalLoading = modal ? modal.querySelector("#modalLoading") : null;
   var modalError = modal ? modal.querySelector("#modalError") : null;
   var modalDetails = modal ? modal.querySelector("#modalDetails") : null;
 
