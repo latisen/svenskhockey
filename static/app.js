@@ -430,43 +430,46 @@
     return null;
   }
 
+  function isRowLive(row) {
+    if (!row || row.classList.contains("match-played")) {
+      return false;
+    }
+
+    if (row.classList.contains("match-live")) {
+      return true;
+    }
+
+    var timeStr = row.getAttribute("data-time");
+    var dateStr = row.getAttribute("data-date") || getStockholmTodayIso();
+    if (!timeStr) {
+      return false;
+    }
+
+    var matchTime = createStockholmDateTime(dateStr, timeStr);
+    if (!matchTime) {
+      return false;
+    }
+
+    return matchTime.getTime() <= Date.now();
+  }
+
   /**
    * Checkar om det finns någon match som är "live" (pågår just nu).
    * En match är live om:
    * - Den är NOT "Färdigspelad"
-   * - OCH tiden för matchstart har passerat (countdown visar att tiden är här)
+   * - OCH tiden för matchstart har passerat
    */
   function hasLiveMatches() {
-    var allCountdowns = Array.prototype.slice.call(
-      seriesList.querySelectorAll(".match-countdown")
+    var allRows = Array.prototype.slice.call(
+      seriesList.querySelectorAll(".match-row")
     );
-    
-    for (var i = 0; i < allCountdowns.length; i++) {
-      var countdownElem = allCountdowns[i];
-      var row = countdownElem.closest(".match-row");
-      
-      if (!row) continue;
-      
-      var timeStr = countdownElem.getAttribute("data-time");
-      var dateStr = row.getAttribute("data-date") || getStockholmTodayIso();
-      if (!timeStr) continue;
-      
-      // Om raden är färdigspelad, skippa
-      if (row.classList.contains("match-played")) continue;
-      
-      // Beräkna tid kvar
-      var now = new Date();
-      var matchTime = createStockholmDateTime(dateStr, timeStr);
-      if (!matchTime) continue;
 
-      var timeRemaining = matchTime.getTime() - now.getTime();
-      
-      // Om tiden för matchstart har passerat (timeRemaining <= 0), då pågår den
-      if (timeRemaining <= 0) {
+    for (var i = 0; i < allRows.length; i++) {
+      if (isRowLive(allRows[i])) {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -479,6 +482,7 @@
     if (hasLive && !pollInterval) {
       // Starta polling
       pollInterval = setInterval(pollForUpdates, 60000); // 60 sekunder
+      pollForUpdates();
       console.log("Live-polling started");
     } else if (!hasLive && pollInterval) {
       // Stoppa polling
