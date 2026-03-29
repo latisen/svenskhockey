@@ -140,7 +140,7 @@
           {% for match in matches %}
             {% set is_clickable = match.match_id %}
             <button
-              class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}{% if not is_clickable %} match-no-details{% endif %}"
+              class="match-row {% if match.status == 'Färdigspelad' %}match-played{% elif match.status == 'Live' %}match-live{% else %}match-upcoming{% endif %}{% if not is_clickable %} match-no-details{% endif %}"
               data-home="{{ match.home_team | lower }}"
               data-away="{{ match.away_team | lower }}"
               data-home-team="{{ match.home_team }}"
@@ -156,7 +156,7 @@
               <!-- Tid & Countdown (vänster) -->
               <div class="match-time-col">
                 <span class="match-time">{{ match.time if match.time else "–" }}</span>
-                {% if match.status != "Färdigspelad" and match.time %}
+                {% if match.status != "Färdigspelad" and match.status != "Live" and match.time %}
                   <span class="match-countdown" data-time="{{ match.time }}">–</span>
                 {% endif %}
               </div>
@@ -197,6 +197,8 @@
                 <div class="match-status-col">
                   {% if match.status == "Färdigspelad" %}
                     <span class="badge badge-played">Färdig</span>
+                  {% elif match.status == "Live" %}
+                    <span class="badge badge-live">Live</span>
                   {% else %}
                     <span class="badge badge-upcoming">Idag</span>
                   {% endif %}

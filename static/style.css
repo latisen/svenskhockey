@@ -534,6 +534,10 @@ a:hover {
   border-left: 4px solid var(--color-played-text);
 }
 
+.match-row.match-live {
+  border-left: 4px solid #d32f2f;
+}
+
 .match-row.match-upcoming {
   border-left: 4px solid var(--color-accent);
 }
@@ -715,6 +719,12 @@ a:hover {
   border: 1px solid #ffb74d;
 }
 
+.badge-live {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
 /* --------------------------------------------------------------------------
    Footer
    -------------------------------------------------------------------------- */
@@ -892,7 +902,6 @@ a:hover {
     padding: 0.25rem 0.4rem;
     min-width: 55px;
   }
-}
 }
 
 /* --------------------------------------------------------------------------

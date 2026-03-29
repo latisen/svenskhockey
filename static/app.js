@@ -389,15 +389,19 @@
         badge.className = "badge";
         if (updatedMatch.status === "Färdigspelad") {
           badge.classList.add("badge-played");
+        } else if (updatedMatch.status === "Live") {
+          badge.classList.add("badge-live");
         } else {
           badge.classList.add("badge-upcoming");
         }
       }
 
       // Uppdatera CSS-klass på rad
-      row.classList.remove("match-played", "match-upcoming");
+      row.classList.remove("match-played", "match-live", "match-upcoming");
       if (updatedMatch.status === "Färdigspelad") {
         row.classList.add("match-played");
+      } else if (updatedMatch.status === "Live") {
+        row.classList.add("match-live");
       } else {
         row.classList.add("match-upcoming");
       }

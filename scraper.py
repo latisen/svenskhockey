@@ -38,6 +38,27 @@ SELECTORS = {
 logger = logging.getLogger(__name__)
 STOCKHOLM_TZ = ZoneInfo("Europe/Stockholm")
 
+
+def _parse_match_datetime(match_date: str, match_time: str) -> datetime | None:
+    """Bygger ett timezone-medvetet datum för matchstart i Stockholm."""
+    if not match_date or not match_time:
+        return None
+
+    try:
+        return datetime.strptime(
+            f"{match_date} {match_time}", "%Y-%m-%d %H:%M"
+        ).replace(tzinfo=STOCKHOLM_TZ)
+    except ValueError:
+        return None
+
+
+def _match_has_started(match_date: str, match_time: str) -> bool:
+    """Returnerar True om matchstart har passerat i Stockholmstid."""
+    match_start = _parse_match_datetime(match_date, match_time)
+    if match_start is None:
+        return False
+    return datetime.now(STOCKHOLM_TZ) >= match_start
+
 # ---------------------------------------------------------------------------
 # Datamodell
 # ---------------------------------------------------------------------------
@@ -133,12 +154,30 @@ def _parse_game_cell(cell) -> tuple[str, str, str]:
     return home_team, away_team, round_info
 
 
-def _determine_status(result: str, match_time: str) -> str:
-    """Avgör matchstatus baserat på om resultat finns och klockslag."""
+def _determine_status(result: str, match_date: str, match_time: str) -> str:
+    """Avgör matchstatus baserat på resultat och matchstart i Stockholmstid."""
     if result:
         return "Färdigspelad"
-    # Om ingen tid anges, räkna som kommande
+    if _match_has_started(match_date, match_time):
+        return "Live"
     return "Spelas idag"
+
+
+def _enrich_live_match(match: Match) -> Match:
+    """Fyller på live-resultat från detaljsidan för pågående matcher."""
+    if match.status != "Live" or not match.match_id:
+        return match
+
+    try:
+        from match_finder import get_match_details
+
+        details = get_match_details(match.match_id)
+        if details and details.get("score"):
+            match.result = details["score"]
+    except Exception as exc:
+        logger.warning(f"Kunde inte hämta live-data för match {match.match_id}: {exc}")
+
+    return match
 
 
 def _parse_matches_from_table(table, today_str: str) -> list[Match]:
@@ -186,7 +225,7 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
             if not home_team:
                 continue
 
-            status = _determine_status(result, match_time)
+            status = _determine_status(result, today_str, match_time)
 
             # Extrahera match-ID från <a> tag i result-cell (cells[2])
             match_id = None
@@ -198,7 +237,7 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
                 if id_match:
                     match_id = id_match.group(1)
 
-            matches.append(Match(
+            match = Match(
                 series=current_series,
                 date=today_str,
                 time=match_time,
@@ -209,7 +248,9 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
                 round_info=round_info,
                 status=status,
                 match_id=match_id,
-            ))
+            )
+
+            matches.append(_enrich_live_match(match))
 
     return matches
 
