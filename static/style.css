@@ -251,6 +251,32 @@ a:hover {
   transform: translateY(0);
 }
 
+.auto-update-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #ffffff;
+  color: #2e7d32;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  box-shadow: var(--shadow-md);
+}
+
+.auto-update-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #43a047;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
 /* --------------------------------------------------------------------------
    Main content
    -------------------------------------------------------------------------- */

@@ -478,7 +478,9 @@
    */
   function updatePollingStatus() {
     var hasLive = hasLiveMatches();
-    
+    var reloadBtn = document.getElementById("reloadBtn");
+    var autoIndicator = document.getElementById("autoUpdateIndicator");
+
     if (hasLive && !pollInterval) {
       // Starta polling
       pollInterval = setInterval(pollForUpdates, 60000); // 60 sekunder
@@ -490,6 +492,10 @@
       pollInterval = null;
       console.log("Live-polling stopped");
     }
+
+    // Visa/dölj knapp vs. indikator
+    if (reloadBtn) reloadBtn.style.display = pollInterval ? "none" : "";
+    if (autoIndicator) autoIndicator.style.display = pollInterval ? "" : "none";
   }
 
   /**
