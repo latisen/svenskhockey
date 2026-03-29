@@ -138,7 +138,7 @@
 
         <div class="matches-list">
           {% for match in matches %}
-            {% set is_clickable = match.status == "Färdigspelad" or (match.status != "Färdigspelad" and match.result) %}
+            {% set is_clickable = match.match_id and (match.status == "Färdigspelad" or match.result) %}
             <button
               class="match-row {% if match.status == 'Färdigspelad' %}match-played{% else %}match-upcoming{% endif %}{% if not is_clickable %} match-no-details{% endif %}"
               data-home="{{ match.home_team | lower }}"
@@ -147,6 +147,7 @@
               data-away-team="{{ match.away_team }}"
               data-date="{{ match.date }}"
               data-time="{{ match.time }}"
+              data-match-id="{{ match.match_id if match.match_id else '' }}"
               data-series="{{ series_name }}"
               type="button"
               {% if not is_clickable %}disabled{% endif %}
@@ -305,6 +306,20 @@
     </div>
   </div>
 </div>
+
+        <!-- Goalkeepers -->
+        <div class="modal-goalkeepers-section" id="modalGoalkeepersSection" hidden>
+          <h3 class="modal-section-title">Målvakter</h3>
+          <div class="modal-goalkeepers" id="modalGoalkeepers">
+          </div>
+        </div>
+
+        <!-- Events by Period -->
+        <div class="modal-events-section" id="modalEventsSection" hidden>
+          <h3 class="modal-section-title">Matchhändelser</h3>
+          <div class="modal-periods" id="modalPeriods">
+          </div>
+        </div>
 
 <!-- ===== FOOTER ===== -->
 <footer class="site-footer">

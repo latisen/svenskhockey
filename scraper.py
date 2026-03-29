@@ -51,6 +51,7 @@ class Match:
     venue: str
     round_info: str        # Omgångsinformation, t.ex. "Kvartsfinal 1"
     status: str            # "Färdigspelad" | "Spelas idag" | "Kommande"
+    match_id: Optional[str] = None  # stats.swehockey.se match-ID (om tillgängligt)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +147,8 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
     - Rader med 1 cell (colspan=5) → serienamnsrad
     - Rader med 4 celler och klass tdOdd/tdNormal → matchrad
     - Övriga rader → ignoreras (rubrikrader etc.)
+    
+    Extraherar även match-ID:n från JavaScript onclick-handlers i <a>-tags.
     """
     matches: list[Match] = []
     current_series = "Okänd serie"
@@ -183,6 +186,16 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
 
             status = _determine_status(result, match_time)
 
+            # Extrahera match-ID från <a> tag i result-cell (cells[2])
+            match_id = None
+            result_link = cells[2].find("a", href=lambda x: x and "javascript:openonlinewindow" in x)
+            if result_link:
+                href = result_link.get("href", "")
+                # Extrahera ID från: javascript:openonlinewindow('/Game/Events/XXXXX','')
+                id_match = re.search(r"/Game/Events/(\d+)", href)
+                if id_match:
+                    match_id = id_match.group(1)
+
             matches.append(Match(
                 series=current_series,
                 date=today_str,
@@ -193,6 +206,7 @@ def _parse_matches_from_table(table, today_str: str) -> list[Match]:
                 venue=venue,
                 round_info=round_info,
                 status=status,
+                match_id=match_id,
             ))
 
     return matches

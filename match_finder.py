@@ -1,8 +1,5 @@
 """
 match_finder.py – Hittar match-IDs från stats.swehockey.se baserat på lag och datum.
-
-Eftersom match-IDs inte är tillgängliga direkt på GamesByDate-sidan,
-söker vi genom ett intervall av IDs för att hitta rätt match.
 """
 
 import requests
@@ -13,9 +10,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Cache för att undvika upprepade sökningar
 _match_id_cache: dict = {}
-CACHE_TTL_SECONDS = 3600  # 1 timme
+CACHE_TTL_SECONDS = 3600
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -38,13 +34,9 @@ def _set_cached_id(home_team: str, away_team: str, date: str, time_str: str, mat
 
 
 def _extract_match_info(html: str) -> tuple[str, str, str] | None:
-    """
-    Extraherar hemmalag, bortalag och datum/tid från en Events-sida.
-    Returnerar (home_team, away_team, datetime_str) eller None.
-    """
+    """Extraherar hemmalag, bortalag och datum/tid från en Events-sida."""
     soup = BeautifulSoup(html, "html.parser")
     
-    # Extrahera lag från <h2>
     h2 = soup.find("h2")
     if not h2:
         return None
@@ -57,12 +49,10 @@ def _extract_match_info(html: str) -> tuple[str, str, str] | None:
     home_team = teams[0].strip()
     away_team = teams[1].strip()
     
-    # Extrahera datum och tid från första <h3> som innehåller ett datum
     h3s = soup.find_all("h3")
     datetime_str = None
     for h3 in h3s:
         text = h3.get_text(strip=True)
-        # Söka efter format "YYYY-MM-DD HH:MM"
         if re.search(r'\d{4}-\d{2}-\d{2}', text):
             datetime_str = text
             break
@@ -74,24 +64,10 @@ def _extract_match_info(html: str) -> tuple[str, str, str] | None:
 
 
 def find_match_id(home_team: str, away_team: str, date: str, time_str: str, start_id: int = 1081000, max_depth: int = 200) -> str | None:
-    """
-    Söker efter ett match-ID baserat på hemmalag, bortalag, datum och tid.
-    
-    Args:
-        home_team: Hemmalag (t.ex. "Halmstad Hammers HC")
-        away_team: Bortalag
-        date: Datum på format YYYY-MM-DD
-        time_str: Tid på format HH:MM
-        start_id: Startvärde för sökningen (default: i närheten av kända IDs)
-        max_depth: Hur många IDs att söka igenom
-    
-    Returnerar match-ID som string, eller None om inte hittat.
-    """
-    # Normalisera lagnamn för jämförelse
+    """Söker efter ett match-ID baserat på hemmalag, bortalag, datum och tid."""
     home_normalized = home_team.strip().lower()
     away_normalized = away_team.strip().lower()
     
-    # Kontrollera cache först
     cached_id = _get_cached_id(home_team, away_team, date, time_str)
     if cached_id:
         logger.info(f"Found cached ID for {home_team} vs {away_team}: {cached_id}")
@@ -99,7 +75,6 @@ def find_match_id(home_team: str, away_team: str, date: str, time_str: str, star
     
     logger.info(f"Searching for match: {home_team} vs {away_team} on {date} at {time_str}")
     
-    # Söka igenom ett intervall av IDs
     for offset in range(-max_depth // 2, max_depth // 2):
         test_id = start_id + offset
         url = f"https://stats.swehockey.se/Game/Events/{test_id}"
@@ -117,10 +92,8 @@ def find_match_id(home_team: str, away_team: str, date: str, time_str: str, star
             match_home_normalized = match_home.strip().lower()
             match_away_normalized = match_away.strip().lower()
             
-            # Begränsa datetime till bara datum och tid (ta bort encoding-artefakter)
             match_datetime_clean = re.sub(r'[^\d\s:\-]', '', match_datetime).strip()
             
-            # Kontrollera om detta är rätt match
             if (match_home_normalized == home_normalized and
                 match_away_normalized == away_normalized and
                 match_datetime_clean.startswith(date) and
@@ -141,13 +114,117 @@ def find_match_id(home_team: str, away_team: str, date: str, time_str: str, star
     return None
 
 
-def get_match_details(match_id: str) -> dict | None:
-    """
-    Hämtar matchdetaljer från Events-sidan.
+def _extract_events_by_period(soup) -> dict:
+    """Extrahera alla matchhändelser grupperade per period."""
+    events_by_period = {}
     
-    Returnerar dict med: home_team, away_team, date, time, score, venue, etc.
-    eller None om någon fel uppstod.
-    """
+    main_table = soup.find('table', class_='tblWrapper')
+    if not main_table:
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            if len(rows) > 30:
+                main_table = table
+                break
+    
+    if not main_table:
+        return events_by_period
+    
+    rows = main_table.find_all('tr')
+    current_period = None
+    
+    for row in rows:
+        cells = row.find_all(['td', 'th'])
+        if not cells:
+            continue
+        
+        first_cell_text = cells[0].get_text(strip=True).replace("Â", "").strip()
+        
+        period_match = re.search(r'(\d+)\s*(?:st|nd|rd|th)?\s+period', first_cell_text, re.I)
+        if period_match:
+            current_period = f"period_{period_match.group(1)}"
+            events_by_period[current_period] = []
+            continue
+        
+        if current_period and len(cells) >= 2:
+            time_val = first_cell_text
+            if re.match(r'\d{1,2}:\d{2}', time_val) or time_val in ['00:00', '60:00']:
+                event_type = cells[1].get_text(strip=True).replace("Â", "").strip() if len(cells) > 1 else ""
+                team = cells[2].get_text(strip=True).replace("Â", "").strip() if len(cells) > 2 else ""
+                
+                player_cell = cells[3].get_text(strip=True).replace("Â", "").replace("\n", " ") if len(cells) > 3 else ""
+                player_cell = re.sub(r'\s+', ' ', player_cell)
+                
+                details = cells[4].get_text(strip=True).replace("Â", "").strip() if len(cells) > 4 else ""
+                
+                event = {
+                    "time": time_val,
+                    "type": event_type,
+                    "team": team,
+                    "player": player_cell,
+                    "details": details
+                }
+                
+                events_by_period[current_period].append(event)
+    
+    return events_by_period
+
+
+def _extract_goalkeeper_info(soup) -> dict:
+    """Extrahera målvaktsstatistik från events-tabellen."""
+    gk_info = {}
+    
+    main_table = soup.find('table', class_='tblWrapper')
+    if not main_table:
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            if len(rows) > 30:
+                main_table = table
+                break
+    
+    if not main_table:
+        return gk_info
+    
+    rows = main_table.find_all('tr')
+    gk_section_found = False
+    
+    for row in rows:
+        cells = row.find_all(['td', 'th'])
+        if not cells:
+            continue
+        
+        row_text = " ".join([c.get_text(strip=True) for c in cells])
+        if "Goalkeeper Summary" in row_text:
+            gk_section_found = True
+            continue
+        
+        if gk_section_found and len(cells) >= 5:
+            team = cells[2].get_text(strip=True).replace("Â", "").strip() if len(cells) > 2 else ""
+            player_info = cells[3].get_text(strip=True).replace("Â", "").strip() if len(cells) > 3 else ""
+            stats = cells[4].get_text(strip=True).replace("Â", "").strip() if len(cells) > 4 else ""
+            
+            if team and player_info and "%" in stats:
+                num_match = re.match(r'(\d+)\.\s*(.+)', player_info)
+                if num_match:
+                    gk_num = num_match.group(1)
+                    gk_name = num_match.group(2).replace("\n", " ").replace("\r", "")
+                    gk_name = re.sub(r'\s+', ' ', gk_name).strip()
+                    
+                    gk_info[gk_num] = {
+                        "name": gk_name,
+                        "team": team,
+                        "stats": stats
+                    }
+            elif not stats and not player_info:
+                if gk_section_found:
+                    break
+    
+    return gk_info
+
+
+def get_match_details(match_id: str) -> dict | None:
+    """Hämtar detaljerad matchinformation från Events-sidan."""
     url = f"https://stats.swehockey.se/Game/Events/{match_id}"
     
     try:
@@ -157,19 +234,17 @@ def get_match_details(match_id: str) -> dict | None:
         
         soup = BeautifulSoup(response.text, "html.parser")
         
-        # Extrahera lag och datum
         h2 = soup.find("h2")
         if not h2:
             return None
         
         teams_text = h2.get_text(strip=True)
-        teams = re.split(r'\s+-\s+', teams_text)
+        teams = re.split(r'[Â\s\xa0]*-[Â\s\xa0]*', teams_text)
         if len(teams) != 2:
+            logger.error(f"Failed to split teams from: {repr(teams_text)}")
             return None
         
-        # Extrahera resultat från mitten av tabellen
-        # Format: <div style="..."><div style="...">3 - 5</div>
-        result_divs = soup.find_all("div", string=re.compile(r'^\s*\d+\s*-\s*\d+\s*$'))
+        result_divs = soup.find_all("div", string=re.compile(r'^\d+[Â\s\xa0]*-[Â\s\xa0]*\d+$'))
         score = None
         for div in result_divs:
             score_text = div.get_text(strip=True)
@@ -177,7 +252,6 @@ def get_match_details(match_id: str) -> dict | None:
                 score = score_text
                 break
         
-        # Extrahera datum, tid och arena från h3-element
         h3s = soup.find_all("h3")
         datetime_str = None
         venue = None
@@ -185,17 +259,15 @@ def get_match_details(match_id: str) -> dict | None:
             text = h3.get_text(strip=True)
             if re.search(r'\d{4}-\d{2}-\d{2}', text):
                 datetime_str = text
-            elif len(text) > 5 and "Arena" in text or "Hall" in text or "Ishall" in text:
+            elif len(text) > 5 and ("Arena" in text or "Hall" in text or "Ishall" in text):
                 venue = text.replace("<b>", "").replace("</b>", "")
         
-        # Extrahera spectators
         spectators = None
         spec_text = soup.get_text()
         spec_match = re.search(r'Spectators:\s*(\d+(?:\s*\d+)*)', spec_text)
         if spec_match:
             spectators = spec_match.group(1).replace(" ", "")
         
-        # Extrahera shots on goal
         shots_table = soup.find("table", class_="tblContent")
         home_shots = None
         away_shots = None
@@ -206,22 +278,26 @@ def get_match_details(match_id: str) -> dict | None:
                 if len(cells) >= 2:
                     first_cell = cells[0].get_text(strip=True)
                     if first_cell == "Shots":
-                        # Nästa cell är hemmalaget's shots
                         if len(cells) >= 2:
                             home_shots = cells[1].get_text(strip=True)
                         if len(cells) >= 6:
                             away_shots = cells[5].get_text(strip=True)
                         break
         
+        events_by_period = _extract_events_by_period(soup)
+        goalkeepers = _extract_goalkeeper_info(soup)
+        
         return {
             "home_team": teams[0].strip(),
             "away_team": teams[1].strip(),
-            "score": score,
-            "datetime": datetime_str,
+            "score": score.replace("Â", "").strip() if score else None,
+            "datetime": datetime_str.replace("Â", "").strip() if datetime_str else None,
             "venue": venue,
             "spectators": spectators,
             "home_shots": home_shots,
             "away_shots": away_shots,
+            "events_by_period": events_by_period,
+            "goalkeepers": goalkeepers,
             "id": match_id,
         }
     

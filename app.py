@@ -102,6 +102,7 @@ def api_matches():
             "venue": m.venue,
             "round_info": m.round_info,
             "status": m.status,
+            "match_id": m.match_id,
         } for m in match_list]
 
     return jsonify({
@@ -127,22 +128,39 @@ def api_match_details():
     Hämtar detaljerad information om en match.
     
     Query-parametrar:
-      - home_team: Hemmalag
-      - away_team: Bortalag
-      - date: Datum (YYYY-MM-DD)
-      - time: Tid (HH:MM)
+      - match_id: Match-ID från stats.swehockey.se (om tillgängligt)
+      - home_team: Hemmalag (krävs om match_id inte är tillgängligt)
+      - away_team: Bortalag (krävs om match_id inte är tillgängligt)
+      - date: Datum (YYYY-MM-DD) (krävs om match_id inte är tillgängligt)
+      - time: Tid (HH:MM) (krävs om match_id inte är tillgängligt)
     """
-    from match_finder import find_match_id, get_match_details
+    from match_finder import get_match_details
     
+    # Försök att använda match_id direkt om det är tillgängligt
+    match_id = request.args.get("match_id", "").strip()
+    
+    if match_id:
+        try:
+            details = get_match_details(match_id)
+            if details:
+                return jsonify(details)
+            else:
+                return jsonify({"error": "Could not fetch match details"}), 404
+        except Exception as e:
+            logger.error(f"Error fetching match details for ID {match_id}: {e}")
+            return jsonify({"error": str(e)}), 500
+    
+    # Fallback: om inget match_id, försök att söka (denna väg är långsam)
     home_team = request.args.get("home_team", "").strip()
     away_team = request.args.get("away_team", "").strip()
     match_date = request.args.get("date", "").strip()
     match_time = request.args.get("time", "").strip()
     
     if not all([home_team, away_team, match_date, match_time]):
-        return jsonify({"error": "Missing required parameters"}), 400
+        return jsonify({"error": "Missing required parameters (either match_id or home_team+away_team+date+time)"}), 400
     
     try:
+        from match_finder import find_match_id
         # Söka efter match-ID
         match_id = find_match_id(home_team, away_team, match_date, match_time)
         if not match_id:

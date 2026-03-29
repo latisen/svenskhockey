@@ -382,6 +382,7 @@
     var awayTeam = matchRow.getAttribute("data-away-team");
     var date = matchRow.getAttribute("data-date");
     var time = matchRow.getAttribute("data-time");
+    var matchId = matchRow.getAttribute("data-match-id");
 
     if (!homeTeam || !awayTeam || !date || !time) {
       showModalError("Matchdata saknas");
@@ -398,8 +399,8 @@
     if (modalError) modalError.setAttribute("hidden", "");
     if (modalDetails) modalDetails.setAttribute("hidden", "");
 
-    // Hämta matchdetaljer från API
-    fetchMatchDetails(homeTeam, awayTeam, date, time);
+    // Hämta matchdetaljer från API (med match_id om tillgängligt)
+    fetchMatchDetails(homeTeam, awayTeam, date, time, matchId);
   }
 
   /**
@@ -428,13 +429,19 @@
   /**
    * Hämtar matchdetaljer från API:t.
    */
-  function fetchMatchDetails(homeTeam, awayTeam, date, time) {
-    var params = new URLSearchParams({
-      home_team: homeTeam,
-      away_team: awayTeam,
-      date: date,
-      time: time,
-    });
+  function fetchMatchDetails(homeTeam, awayTeam, date, time, matchId) {
+    var params = new URLSearchParams();
+    
+    // Om match_id finns, använd bara det
+    if (matchId) {
+      params.append("match_id", matchId);
+    } else {
+      // Fallback: använd hemmalag, bortalag, datum och tid
+      params.append("home_team", homeTeam);
+      params.append("away_team", awayTeam);
+      params.append("date", date);
+      params.append("time", time);
+    }
 
     fetch("/api/match-details?" + params.toString(), {
       method: "GET",
@@ -536,6 +543,110 @@
     var detailsLink = document.getElementById("modalDetailsLink");
     if (detailsLink && details.id) {
       detailsLink.href = "https://stats.swehockey.se/Game/Events/" + details.id;
+
+        // Display Goalkeepers
+        var gkSection = document.getElementById("modalGoalkeepersSection");
+        var gkContainer = document.getElementById("modalGoalkeepers");
+        if (gkContainer && details.goalkeepers) {
+          var gkCount = Object.keys(details.goalkeepers).length;
+          if (gkCount > 0) {
+            gkSection.removeAttribute("hidden");
+            gkContainer.innerHTML = "";
+        
+            for (var gkNum in details.goalkeepers) {
+              if (details.goalkeepers.hasOwnProperty(gkNum)) {
+                var gk = details.goalkeepers[gkNum];
+                var gkDiv = document.createElement("div");
+                gkDiv.className = "modal-gk-row";
+                gkDiv.innerHTML = 
+                  "<div class='gk-name'>#" + gkNum + " " + (gk.name || "?") + " (" + (gk.team || "?") + ")</div>" +
+                  "<div class='gk-stats'>" + (gk.stats || "–") + "</div>";
+                gkContainer.appendChild(gkDiv);
+              }
+            }
+          } else {
+            gkSection.setAttribute("hidden", "");
+          }
+        }
+
+        // Display Events by Period
+        var eventsSection = document.getElementById("modalEventsSection");
+        var periodsContainer = document.getElementById("modalPeriods");
+        if (periodsContainer && details.events_by_period) {
+          var eventCount = 0;
+          for (var period in details.events_by_period) {
+            if (details.events_by_period.hasOwnProperty(period)) {
+              eventCount += details.events_by_period[period].length;
+            }
+          }
+      
+          if (eventCount > 0) {
+            eventsSection.removeAttribute("hidden");
+            periodsContainer.innerHTML = "";
+        
+            // Display each period
+            for (var p = 1; p <= 3; p++) {
+              var periodKey = "period_" + p;
+              var periodEvents = details.events_by_period[periodKey];
+          
+              if (periodEvents && periodEvents.length > 0) {
+                var periodDiv = document.createElement("div");
+                periodDiv.className = "modal-period";
+            
+                var periodTitle = document.createElement("h4");
+                periodTitle.className = "modal-period-title";
+                periodTitle.textContent = "Period " + p;
+                periodDiv.appendChild(periodTitle);
+            
+                var eventsList = document.createElement("div");
+                eventsList.className = "modal-events-list";
+            
+                // Show only goals and important events
+                var goals = [];
+                var penalties = [];
+            
+                for (var i = 0; i < periodEvents.length; i++) {
+                  var evt = periodEvents[i];
+                  if (evt.type && evt.type.indexOf("(") > -1) {
+                    goals.push(evt);
+                  } else if (evt.type && evt.type.indexOf("min") > -1) {
+                    penalties.push(evt);
+                  }
+                }
+            
+                // Display goals
+                for (var j = 0; j < goals.length; j++) {
+                  var goal = goals[j];
+                  var goalDiv = document.createElement("div");
+                  goalDiv.className = "modal-event modal-event-goal";
+                  goalDiv.innerHTML = 
+                    "<span class='event-time'>" + (goal.time || "–") + "</span> " +
+                    "<span class='event-type'>" + (goal.type || "–") + "</span> " +
+                    "<span class='event-team'>" + (goal.team || "–") + "</span> " +
+                    "<span class='event-player'>" + (goal.player ? goal.player.substring(0, 50) : "–") + "</span>";
+                  eventsList.appendChild(goalDiv);
+                }
+            
+                // Display first 3 penalties
+                for (var k = 0; k < Math.min(penalties.length, 3); k++) {
+                  var penalty = penalties[k];
+                  var penDiv = document.createElement("div");
+                  penDiv.className = "modal-event modal-event-penalty";
+                  penDiv.innerHTML = 
+                    "<span class='event-time'>" + (penalty.time || "–") + "</span> " +
+                    "<span class='event-type'>" + (penalty.type || "–") + "</span> " +
+                    "<span class='event-team'>" + (penalty.team || "–") + "</span>";
+                  eventsList.appendChild(penDiv);
+                }
+            
+                periodDiv.appendChild(eventsList);
+                periodsContainer.appendChild(periodDiv);
+              }
+            }
+          } else {
+            eventsSection.setAttribute("hidden", "");
+          }
+        }
     }
 
     // Visa detaljer, dölj laddning
