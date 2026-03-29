@@ -128,14 +128,9 @@
               data-home="{{ match.home_team | lower }}"
               data-away="{{ match.away_team | lower }}"
             >
-              <!-- Tid / Status-badge -->
+              <!-- Tid -->
               <div class="match-time-col">
                 <span class="match-time">{{ match.time if match.time else "–" }}</span>
-                {% if match.status == "Färdigspelad" %}
-                  <span class="badge badge-played">Färdigspelad</span>
-                {% else %}
-                  <span class="badge badge-upcoming">Spelas idag</span>
-                {% endif %}
               </div>
 
               <!-- Laginfo -->
@@ -150,12 +145,21 @@
                 {% endif %}
               </div>
 
-              <!-- Resultat -->
+              <!-- Resultat & Status -->
               <div class="match-result-col">
                 {% if match.result %}
                   <span class="match-result">{{ match.result }}</span>
                 {% else %}
                   <span class="match-result-placeholder">vs</span>
+                {% endif %}
+              </div>
+
+              <!-- Status-badge -->
+              <div class="match-status-col">
+                {% if match.status == "Färdigspelad" %}
+                  <span class="badge badge-played">Färdigspelad</span>
+                {% else %}
+                  <span class="badge badge-upcoming">Spelas idag</span>
                 {% endif %}
               </div>
 

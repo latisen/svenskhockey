@@ -5,6 +5,7 @@
  *  1. Livesökning – filtrera matchrader och sektioner i realtid
  *  2. Rensa-knapp för sökrutan
  *  3. Laddningsindikator på reload-knappen
+ *  4. Live-polling för uppdatering av matcher som spelas
  */
 
 (function () {
@@ -131,4 +132,138 @@
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // 5. Live-polling för uppdatering av matcher
+  // ---------------------------------------------------------------------------
+
+  var lastFetchedAt = null;
+  var pollInterval = null;
+
+  /**
+   * Hämtar uppdateringar från API:t och uppdaterar matchkorten.
+   */
+  function pollForUpdates() {
+    fetch("/api/matches", {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("Failed to fetch updates");
+        return resp.json();
+      })
+      .then(function (data) {
+        if (data.error) {
+          console.warn("API error:", data.error);
+          return;
+        }
+
+        // Uppdatera tidsangivelsen "senast uppdaterad"
+        var statusElem = document.querySelector(".last-updated");
+        if (statusElem && data.fetched_at) {
+          statusElem.textContent = "Uppdaterad " + data.fetched_at;
+          lastFetchedAt = data.fetched_at;
+        }
+
+        // Uppdatera matchrader
+        updateMatchRows(data.matches);
+      })
+      .catch(function (err) {
+        console.error("Error polling updates:", err);
+      });
+  }
+
+  /**
+   * Uppdaterar matchrader baserat på ny data från API:t.
+   * Matchar gamla rader med nya data och uppdaterar resultat/tid.
+   */
+  function updateMatchRows(groupedMatches) {
+    var allRows = Array.prototype.slice.call(
+      seriesList.querySelectorAll(".match-row")
+    );
+
+    allRows.forEach(function (row) {
+      var home = row.getAttribute("data-home");
+      var away = row.getAttribute("data-away");
+      if (!home || !away) return;
+
+      // Hitta motsvarande match i ny data
+      var updatedMatch = findMatchInData(groupedMatches, home, away);
+      if (!updatedMatch) return;
+
+      // Uppdatera resultatkolumn
+      var resultCol = row.querySelector(".match-result-col");
+      if (resultCol) {
+        resultCol.innerHTML = "";
+        if (updatedMatch.result) {
+          var resultSpan = document.createElement("span");
+          resultSpan.className = "match-result";
+          resultSpan.textContent = updatedMatch.result;
+          resultCol.appendChild(resultSpan);
+        } else {
+          var placeholderSpan = document.createElement("span");
+          placeholderSpan.className = "match-result-placeholder";
+          placeholderSpan.textContent = "vs";
+          resultCol.appendChild(placeholderSpan);
+        }
+      }
+
+      // Uppdatera badge (status)
+      var badge = row.querySelector(".badge");
+      if (badge) {
+        badge.textContent = updatedMatch.status;
+        badge.className = "badge";
+        if (updatedMatch.status === "Färdigspelad") {
+          badge.classList.add("badge-played");
+        } else {
+          badge.classList.add("badge-upcoming");
+        }
+      }
+
+      // Uppdatera CSS-klass på rad
+      row.classList.remove("match-played", "match-upcoming");
+      if (updatedMatch.status === "Färdigspelad") {
+        row.classList.add("match-played");
+      } else {
+        row.classList.add("match-upcoming");
+      }
+    });
+  }
+
+  /**
+   * Söker efter en match i den nya data-strukturen.
+   * data-home och data-away är i gemener.
+   */
+  function findMatchInData(groupedMatches, homeKey, awayKey) {
+    for (var series in groupedMatches) {
+      var matches = groupedMatches[series];
+      for (var i = 0; i < matches.length; i++) {
+        var m = matches[i];
+        var mHome = (m.home_team || "").toLowerCase();
+        var mAway = (m.away_team || "").toLowerCase();
+        if (mHome === homeKey && mAway === awayKey) {
+          return m;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Starta polling när sidan laddat. Uppdatera var 30:e sekund.
+   */
+  function startPolling() {
+    // Första uppdatering efter 30 sekunder
+    pollInterval = setInterval(pollForUpdates, 30000);
+  }
+
+  // Starta polling när DOM är redo
+  if (
+    document.readyState === "complete" ||
+    document.readyState === "interactive"
+  ) {
+    startPolling();
+  } else {
+    document.addEventListener("DOMContentLoaded", startPolling);
+  }
 })();
+

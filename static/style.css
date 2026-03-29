@@ -450,7 +450,7 @@ a:hover {
 
 .match-row {
   display: grid;
-  grid-template-columns: 130px 1fr auto auto;
+  grid-template-columns: 110px 1fr auto auto auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.875rem 1.25rem;
@@ -550,6 +550,11 @@ a:hover {
   font-size: 0.875rem;
   color: var(--color-text-muted);
   font-weight: 400;
+}
+
+/* Status-kolumn */
+.match-status-col {
+  flex-shrink: 0;
 }
 
 /* Arenakolumn */
@@ -654,11 +659,16 @@ a:hover {
 
   .match-row {
     grid-template-columns: 110px 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto auto;
   }
 
   .match-result-col {
-    display: none;  /* dold på mellanstora skärmar… visas på stor skärm */
+    display: none;
+  }
+
+  .match-status-col {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .match-venue-col {
@@ -718,6 +728,11 @@ a:hover {
   .match-time-col {
     flex-direction: row;
     align-items: center;
+  }
+
+  .match-status-col {
+    grid-column: 1;
+    justify-self: flex-start;
   }
 
   .team {
