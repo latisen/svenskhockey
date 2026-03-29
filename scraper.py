@@ -75,6 +75,8 @@ class Match:
     round_info: str        # Omgångsinformation, t.ex. "Kvartsfinal 1"
     status: str            # "Färdigspelad" | "Spelas idag" | "Kommande"
     match_id: Optional[str] = None  # stats.swehockey.se match-ID (om tillgängligt)
+    current_period: Optional[str] = None
+    elapsed_time: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +176,9 @@ def _enrich_live_match(match: Match) -> Match:
         details = get_match_details(match.match_id)
         if details and details.get("score"):
             match.result = details["score"]
+        if details:
+            match.current_period = details.get("current_period")
+            match.elapsed_time = details.get("elapsed_time")
     except Exception as exc:
         logger.warning(f"Kunde inte hämta live-data för match {match.match_id}: {exc}")
 

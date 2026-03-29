@@ -110,6 +110,8 @@ def api_matches():
             "round_info": m.round_info,
             "status": m.status,
             "match_id": m.match_id,
+            "current_period": m.current_period,
+            "elapsed_time": m.elapsed_time,
         } for m in match_list]
 
     return jsonify({

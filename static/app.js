@@ -382,6 +382,46 @@
         }
       }
 
+      // Spara live metadata på raden
+      row.setAttribute("data-current-period", updatedMatch.current_period || "");
+      row.setAttribute("data-elapsed-time", updatedMatch.elapsed_time || "");
+
+      // Uppdatera period/tid under resultatet
+      var liveMeta = row.querySelector(".match-live-meta");
+      var currentPeriod = updatedMatch.current_period || "";
+      var elapsedTime = updatedMatch.elapsed_time || "";
+      if ((currentPeriod || elapsedTime) && !liveMeta) {
+        liveMeta = document.createElement("div");
+        liveMeta.className = "match-live-meta";
+
+        var statusCol = row.querySelector(".match-status-col");
+        if (statusCol && statusCol.parentNode) {
+          statusCol.parentNode.insertBefore(liveMeta, statusCol);
+        }
+      }
+
+      if (liveMeta) {
+        if (!currentPeriod && !elapsedTime) {
+          liveMeta.remove();
+        } else {
+          liveMeta.innerHTML = "";
+
+          if (currentPeriod) {
+            var periodSpan = document.createElement("span");
+            periodSpan.className = "match-live-period";
+            periodSpan.textContent = currentPeriod;
+            liveMeta.appendChild(periodSpan);
+          }
+
+          if (elapsedTime) {
+            var elapsedSpan = document.createElement("span");
+            elapsedSpan.className = "match-live-elapsed";
+            elapsedSpan.textContent = elapsedTime;
+            liveMeta.appendChild(elapsedSpan);
+          }
+        }
+      }
+
       // Uppdatera badge (status)
       var badge = row.querySelector(".badge");
       if (badge) {
@@ -686,6 +726,18 @@
     var dateTimeElem = document.getElementById("modalDateTime");
     if (dateTimeElem) {
       dateTimeElem.textContent = cleanText(details.datetime || "–");
+    }
+
+    // Aktuell period
+    var currentPeriodElem = document.getElementById("modalCurrentPeriod");
+    if (currentPeriodElem) {
+      currentPeriodElem.textContent = cleanText(details.current_period || "–");
+    }
+
+    // Förfluten speltid
+    var elapsedTimeElem = document.getElementById("modalElapsedTime");
+    if (elapsedTimeElem) {
+      elapsedTimeElem.textContent = cleanText(details.elapsed_time || "–");
     }
 
     // Arena

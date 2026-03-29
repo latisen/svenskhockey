@@ -152,6 +152,8 @@
               data-date="{{ match.date }}"
               data-time="{{ match.time }}"
               data-match-id="{{ match.match_id if match.match_id else '' }}"
+              data-current-period="{{ match.current_period if match.current_period else '' }}"
+              data-elapsed-time="{{ match.elapsed_time if match.elapsed_time else '' }}"
               data-series="{{ series_name }}"
               type="button"
               {% if not is_clickable %}disabled{% endif %}
@@ -198,6 +200,16 @@
                     <span class="match-result-placeholder">–</span>
                   {% endif %}
                 </div>
+                {% if match.current_period or match.elapsed_time %}
+                  <div class="match-live-meta">
+                    {% if match.current_period %}
+                      <span class="match-live-period">{{ match.current_period }}</span>
+                    {% endif %}
+                    {% if match.elapsed_time %}
+                      <span class="match-live-elapsed">{{ match.elapsed_time }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
                 <div class="match-status-col">
                   {% if match.status == "Färdigspelad" %}
                     <span class="badge badge-played">Färdig</span>
@@ -269,6 +281,14 @@
 
         <!-- Alltid synlig: Match Info & Statistics -->
         <div class="modal-info-section">
+          <div class="modal-info-row">
+            <span class="modal-info-label">Aktuell period:</span>
+            <span class="modal-info-value" id="modalCurrentPeriod"></span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Speltid:</span>
+            <span class="modal-info-value" id="modalElapsedTime"></span>
+          </div>
           <div class="modal-info-row">
             <span class="modal-info-label">Datum & Tid:</span>
             <span class="modal-info-value" id="modalDateTime"></span>

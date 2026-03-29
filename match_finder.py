@@ -323,6 +323,105 @@ def _extract_summary_stats(soup) -> dict:
     return summary
 
 
+def _time_to_seconds(time_str: str) -> int | None:
+    """Konverterar MM:SS eller HH:MM:SS till sekunder."""
+    cleaned = _clean_text(time_str)
+    if not cleaned:
+        return None
+
+    parts = cleaned.split(":")
+    if len(parts) == 2:
+        minutes, seconds = parts
+        if not (minutes.isdigit() and seconds.isdigit()):
+            return None
+        return int(minutes) * 60 + int(seconds)
+
+    if len(parts) == 3:
+        hours, minutes, seconds = parts
+        if not (hours.isdigit() and minutes.isdigit() and seconds.isdigit()):
+            return None
+        return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+
+    return None
+
+
+def _format_seconds_as_mmss(total_seconds: int) -> str:
+    """Formaterar sekunder till MM:SS."""
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _extract_live_progress(soup, events_by_period: dict) -> dict:
+    """Extraherar aktuell period och förfluten matchtid från scorekort + events."""
+    progress = {
+        "status_text": None,
+        "current_period": None,
+        "elapsed_time": None,
+    }
+
+    info_area = soup.find("td", class_="tdInfoArea")
+    status_text = None
+    if info_area:
+        status_candidates = []
+        for div in info_area.find_all("div"):
+            text = _clean_text(div.get_text(" ", strip=True))
+            if not text:
+                continue
+            lowered = text.lower()
+            if any(token in lowered for token in ["period", "overtime", "intermission", "final", "shootout"]):
+                status_candidates.append(text)
+
+        if status_candidates:
+            status_text = status_candidates[0]
+            progress["status_text"] = status_text
+
+    if status_text:
+        period_match = re.search(r"(\d+)(?:st|nd|rd|th)?\s+period", status_text, re.I)
+        if period_match:
+            progress["current_period"] = f"Period {period_match.group(1)}"
+
+        overtime_match = re.search(r"(\d+)(?:st|nd|rd|th)?\s+overtime", status_text, re.I)
+        if overtime_match:
+            progress["current_period"] = f"OT {overtime_match.group(1)}"
+
+        status_time_match = re.search(r"(\d{1,2}:\d{2})", status_text)
+        if status_time_match:
+            status_elapsed = _time_to_seconds(status_time_match.group(1))
+            if status_elapsed is not None:
+                progress["elapsed_time"] = _format_seconds_as_mmss(status_elapsed)
+
+        if "final" in status_text.lower() and not progress["current_period"]:
+            progress["current_period"] = "Slut"
+
+    # Fallback: använd senaste händelsetid i actions-tabellen
+    latest_event_seconds = None
+    for period_events in events_by_period.values():
+        for event in period_events:
+            event_time = _clean_text(event.get("time", ""))
+            total_seconds = _time_to_seconds(event_time)
+            if total_seconds is None:
+                continue
+            if latest_event_seconds is None or total_seconds > latest_event_seconds:
+                latest_event_seconds = total_seconds
+
+    if progress["elapsed_time"] is None and latest_event_seconds is not None:
+        progress["elapsed_time"] = _format_seconds_as_mmss(latest_event_seconds)
+
+    if progress["current_period"] is None and latest_event_seconds is not None:
+        if latest_event_seconds < 20 * 60:
+            progress["current_period"] = "Period 1"
+        elif latest_event_seconds < 40 * 60:
+            progress["current_period"] = "Period 2"
+        elif latest_event_seconds < 60 * 60:
+            progress["current_period"] = "Period 3"
+        else:
+            ot_number = ((latest_event_seconds - 60 * 60) // (5 * 60)) + 1
+            progress["current_period"] = f"OT {ot_number}"
+
+    return progress
+
+
 def _extract_reports(match_id: str) -> list[dict]:
     """Hämtar rapportlänkar från Reports-sidan."""
     report_url = f"https://stats.swehockey.se/Game/Reports/{match_id}"
@@ -563,6 +662,7 @@ def get_match_details(match_id: str) -> dict | None:
         summary_stats = _extract_summary_stats(soup)
         lineup_data = _extract_lineups(match_id)
         reports = _extract_reports(match_id)
+        live_progress = _extract_live_progress(soup, events_by_period)
         
         return {
             "home_team": teams[0].strip(),
@@ -579,6 +679,9 @@ def get_match_details(match_id: str) -> dict | None:
             "events_by_period": events_by_period,
             "goalkeepers": goalkeepers,
             "reports": reports,
+            "status_text": live_progress["status_text"],
+            "current_period": live_progress["current_period"],
+            "elapsed_time": live_progress["elapsed_time"],
             "id": match_id,
         }
     
